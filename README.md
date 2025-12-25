@@ -10,14 +10,6 @@ DiIiS is a fully-functional open-source local server for [Diablo III: Reaper of 
 
 [Disclaimer and Project Philosophy](disclaimer.md).
 
-# Development
-
-Developers, please contribute using the branch: **_community_**, always create your branches from it and also follow the Roadmap below.
-
-# Enthusiasts
-
-To test the server, use the **_test-stable_** or **_community_** branch
-
 ## Features
 
 - Implemented account creation system, authorization and lobby.
@@ -35,10 +27,6 @@ To test the server, use the **_test-stable_** or **_community_** branch
 - Implemented personal artificial intelligence for 40% of all monsters.
 - Implemented personal artificial intelligence for half of the Bosses.
 - Implemented LAN
-
-## Restrictions
-
-- Donate Store implementation is removed.
 
 # Installation
 
