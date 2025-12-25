@@ -2,6 +2,8 @@
 
 ![](pictures/logo.png)
 
+<img width="2336" height="1212" alt="Main" src="https://github.com/user-attachments/assets/f74ed1f0-a225-4a6c-8738-64ae7a9e3e7a" />
+
 # DiIiS Project
 
 DiIiS is a fully-functional open-source local server for [Diablo III: Reaper of Souls](https://eu.diablo3.blizzard.com).
