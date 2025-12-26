@@ -1,48 +1,58 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace DiIiS_NA.REST.IO.Zlib
 {
     public static partial class ZLib
     {
+        /// <summary>
+        /// Compresses payload using RFC1950 (zlib wrapper) via .NET's native-backed ZLibStream.
+        /// Output includes zlib header + Adler32, matching Diablo III packet expectations.
+        /// </summary>
         public static byte[] Compress(byte[] data)
         {
-            ByteBuffer buffer = new ByteBuffer();
-            buffer.WriteUInt8(0x78);
-            buffer.WriteUInt8(0x9c);
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            if (data.Length == 0) return Array.Empty<byte>();
 
-            uint adler32 = ZLib.adler32(1, data, (uint)data.Length);// Adler32(1, data, (uint)data.Length);
-            var ms = new MemoryStream();
-            using (var deflateStream = new DeflateStream(ms, CompressionMode.Compress))
+            using var ms = new MemoryStream(capacity: Math.Min(data.Length, 64 * 1024));
+            // ZLibStream produces the correct zlib-wrapped DEFLATE stream with Adler32 automatically.
+            using (var z = new ZLibStream(ms, CompressionLevel.Fastest, leaveOpen: true))
             {
-                deflateStream.Write(data, 0, data.Length);
-                deflateStream.Flush();
+                z.Write(data, 0, data.Length);
             }
-            buffer.WriteBytes(ms.ToArray());
-            buffer.WriteBytes(BitConverter.GetBytes(adler32).Reverse().ToArray());
-
-            return buffer.GetData();
+            return ms.ToArray();
         }
 
+        /// <summary>
+        /// Decompresses RFC1950 (zlib wrapper) payload via .NET's native-backed ZLibStream.
+        /// Reads exactly <paramref name="unpackedSize"/> bytes for performance and correctness.
+        /// </summary>
         public static byte[] Decompress(byte[] data, uint unpackedSize)
         {
-            byte[] decompressData = new byte[unpackedSize];
-            using (var deflateStream = new DeflateStream(new MemoryStream(data, 2, data.Length - 6), CompressionMode.Decompress))
-            {
-                var decompressed = new MemoryStream();
-                deflateStream.CopyTo(decompressed);
+            if (data == null) throw new ArgumentNullException(nameof(data));
 
-                decompressed.Seek(0, SeekOrigin.Begin);
-                for (int i = 0; i < unpackedSize; i++)
-                    decompressData[i] = (byte)decompressed.ReadByte();
+            int expectedSize = checked((int)unpackedSize);
+            if (expectedSize == 0) return Array.Empty<byte>();
+
+            var output = new byte[expectedSize];
+
+            using var input = new MemoryStream(data, writable: false);
+            using var z = new ZLibStream(input, CompressionMode.Decompress, leaveOpen: false);
+
+            int offset = 0;
+            while (offset < expectedSize)
+            {
+                int read = z.Read(output, offset, expectedSize - offset);
+                if (read <= 0)
+                {
+                    // Premature end of stream; input is truncated or unpackedSize is wrong.
+                    throw new InvalidDataException($"Unexpected end of zlib stream (read {offset} of {expectedSize} bytes).");
+                }
+                offset += read;
             }
 
-            return decompressData;
+            return output;
         }
     }
 }
