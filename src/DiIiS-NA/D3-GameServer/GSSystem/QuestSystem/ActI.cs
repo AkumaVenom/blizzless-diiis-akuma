@@ -72,7 +72,7 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
             {
                 Completed = false,
                 Saveable = false,
-                NextStep = 42,
+                NextStep = 60,
                 OnAdvance = () =>
                 {
                     var world = Game.GetWorld(WorldSno.trout_town);
@@ -166,6 +166,22 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
                 OnAdvance = () =>
                 { //kill wretched mother
                     var world = Game.GetWorld(WorldSno.trout_town);
+                    // When skipping the Leah Inn talk step, ensure the path forward is unblocked.
+                    try
+                    {
+                        if (world.GetActorBySNO(ActorSno._trout_newtristram_blocking_cart, true) != null)
+                            world.GetActorBySNO(ActorSno._trout_newtristram_blocking_cart, true).Hidden = true;
+                    }
+                    catch { }
+
+                    // Ensure the town gate is open (same behavior as the skipped step 42).
+                    try
+                    {
+                        if (world.GetActorsBySNO(ActorSno._trout_newtristram_gate_town).FirstOrDefault(d => d.Visible) != null)
+                            Open(world, ActorSno._trout_newtristram_gate_town);
+                    }
+                    catch { }
+
                     Break(world, ActorSno._trout_wagon_barricade);
 
                     foreach (var sp in world.GetActorsBySNO(ActorSno._spawner_zombieskinny_a_immediate))
@@ -176,8 +192,11 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
                                 world.SpawnMonster(ActorSno._zombieskinny_a, sp.Position);
                     }
 
+                    // Wretched Mother can spawn as different SNOs depending on scripts/world state; listen for both.
                     ActivateQuestMonsters(world, ActorSno._zombiefemale_a_tristramquest_unique);
+                    ActivateQuestMonsters(world, ActorSno._zombiefemale_unique_wretchedqueen);
                     ListenKill(ActorSno._zombiefemale_a_tristramquest_unique, 1, new Advance());
+                    ListenKill(ActorSno._zombiefemale_unique_wretchedqueen, 1, new Advance());
                 }
             });
 
