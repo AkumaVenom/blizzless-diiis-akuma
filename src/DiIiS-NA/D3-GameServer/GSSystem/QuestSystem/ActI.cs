@@ -1372,6 +1372,8 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
                     var world = Game.GetWorld(WorldSno.trout_town);
                     DestroyFollower(ActorSno._leah);
                     AddFollower(world, ActorSno._leah);
+                    // Ensure the Tristram Fields gate is open when the "Kill the Brigands" step starts (players can load directly into this step).
+                    try { (world.FindActorAt(ActorSno._trout_tristramfield_field_gate, new Vector3D { X = 1523.13f, Y = 857.71f, Z = 39.26f }, 5.0f) as Door)?.Open(); } catch { }
                     world.SpawnMonster(ActorSno._graverobber_c_nigel, new Vector3D { X = 1471.473f, Y = 747.4875f, Z = 40.1f });
                     ListenKill(ActorSno._graverobber_c_nigel, 1, new Advance());
                 }
