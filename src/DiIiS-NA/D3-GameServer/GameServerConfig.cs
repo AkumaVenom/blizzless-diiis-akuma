@@ -345,6 +345,17 @@ namespace DiIiS_NA.GameServer
 			set => Set(nameof(ForceMinimapVisibility), value);
 		}
 
+
+		/// <summary>
+		/// Enables the custom Necromancer "Blood Build" behavior (Siphon Blood multi-target + execution explosions).
+		/// When disabled, Siphon Blood retains retail behavior.
+		/// </summary>
+		public bool NecromancerBloodBuildSeason3Enabled
+		{
+			get => GetBoolean(nameof(NecromancerBloodBuildSeason3Enabled), false);
+			set => Set(nameof(NecromancerBloodBuildSeason3Enabled), value);
+		}
+
 		#endregion
 
 		public static GameServerConfig Instance { get; } = new();

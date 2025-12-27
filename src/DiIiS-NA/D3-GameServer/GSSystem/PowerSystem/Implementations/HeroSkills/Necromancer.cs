@@ -4,6 +4,7 @@ using DiIiS_NA.D3_GameServer.Core.Types.SNO;
 using DiIiS_NA.GameServer.Core.Types.Math;
 using DiIiS_NA.GameServer.Core.Types.SNO;
 using DiIiS_NA.GameServer.Core.Types.TagMap;
+using DiIiS_NA.GameServer;
 using DiIiS_NA.GameServer.GSSystem.ActorSystem;
 using DiIiS_NA.GameServer.GSSystem.ActorSystem.Implementations.Minions;
 using DiIiS_NA.GameServer.GSSystem.PowerSystem.Payloads;
@@ -505,8 +506,34 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
             {
                 attack.Targets ??= new TargetList();
                 attack.Targets.Actors ??= new List<Actor>();
-                if (Target != null)
-                    attack.Targets.Actors.Add(Target);
+
+                if (GameServerConfig.Instance.NecromancerBloodBuildSeason3Enabled)
+                {
+                    // D4 Season 3-inspired "Blood Build" behavior:
+                    // latch onto multiple nearby enemies around the aimed point.
+                    var multi = GetEnemiesInRadius(TargetPosition, 15f);
+                    // Only latch onto enemies within a screen-ish distance of the player.
+                    if (multi?.Actors != null)
+                    {
+                        multi.Actors = multi.Actors
+                            .Where(a => a != null && PowerMath.Distance2D(User.Position, a.Position) <= BloodBuildMaxScreenDistanceToPlayer)
+                            .OrderBy(a => PowerMath.Distance2D(TargetPosition, a.Position))
+                            .Take(BloodBuildMaxSiphonTargets)
+                            .ToList();
+                    }
+                    attack.Targets = multi;
+                    attack.Targets ??= new TargetList();
+                    attack.Targets.Actors ??= new List<Actor>();
+
+                    // Fallback to retail single-target if no valid enemies were found.
+                    if (attack.Targets.Actors.Count == 0 && Target != null)
+                        attack.Targets.Actors.Add(Target);
+                }
+                else
+                {
+                    if (Target != null)
+                        attack.Targets.Actors.Add(Target);
+                }
                 DamageType DType = DamageType.Physical;
                 if (Rune_A > 0) DType = DamageType.Cold;
                 else if (Rune_D > 0) DType = DamageType.Poison;
@@ -520,6 +547,11 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
                     ((Player) User).AddPercentageHP(2);
                     if (Rune_C < 1)
                         GeneratePrimaryResource(15f);
+// Optional custom execution explosions (D4 S3-inspired).
+if (GameServerConfig.Instance.NecromancerBloodBuildSeason3Enabled)
+{
+    TryTriggerBloodBuildExplosion(hit.Target, 2, 1.0f);
+}
 
                 };
 
@@ -553,6 +585,135 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
             attack.Apply();
             yield break;
         }
+
+// --- Custom "Blood Build" helpers --------------------------------------------------------
+
+private const float BloodBuildExecuteHpThreshold = 0.40f;
+private const float BloodBuildExplosionRadius = 10f;
+private const float BloodBuildExplosionDamage = 1.75f; // weapon damage multiplier (kept moderate)
+private const float BloodBuildExplosionCooldownSeconds = 0.8f;
+private const int BloodBuildMaxSiphonTargets = 5;
+private const float BloodBuildMaxScreenDistanceToPlayer = 60f; // "end of screen" heuristic
+private const float BloodBuildCorpseChainRadius = 11f;
+private const int BloodBuildMaxCorpsesToDetonatePerExplosion = 2;
+private const float BloodBuildCorpseDetonationDamageScale = 0.75f;
+private const int BloodBuildMaxCorpseChainDepth = 2;
+
+
+
+private void SpawnBloodBuildExplosionFx(Vector3D position)
+{
+    // Corpse Explosion-like VFX so it is obvious the proc fired.
+    var fx = SpawnEffect(ActorSno._p6_necro_corpseexplosion_projectile_spawn, position, 0, WaitSeconds(0.2f));
+    fx?.PlayEffectGroup(457183);
+}
+
+private void DetonateNearbyRealCorpses(Vector3D center, int chainDepth, float chainDamageScale)
+{
+    if (chainDepth <= 0 || chainDamageScale <= 0f) return;
+
+    // Find existing Necromancer corpses and detonate a limited number for chain reactions.
+    var corpses = User.GetActorsInRange(center, BloodBuildCorpseChainRadius)
+        .Where(a => a != null && !a.Dead && a.SNO == ActorSno._p6_necro_corpse_flesh)
+        .Take(BloodBuildMaxCorpsesToDetonatePerExplosion)
+        .ToList();
+
+    foreach (var corpse in corpses)
+    {
+        SpawnBloodBuildExplosionFx(corpse.Position);
+
+        // Re-use the same explosion logic, but scaled down to avoid making it too easy.
+        TriggerBloodBuildExplosionAttack(corpse.Position,
+            Math.Min(chainDepth, BloodBuildMaxCorpseChainDepth),
+            chainDamageScale * BloodBuildCorpseDetonationDamageScale,
+            corpse);
+
+        corpse.Destroy();
+    }
+}
+
+
+private void TryTriggerBloodBuildExplosion(Actor victim, int chainDepth, float chainDamageScale)
+{
+    if (victim == null || victim.Dead) return;
+
+    // Prevent spam / infinite loops.
+    if (HasBuff<BloodBuildExplosionLockout>(victim))
+        return;
+
+    float maxHp = victim.Attributes[GameAttributes.Hitpoints_Max_Total];
+    if (maxHp <= 0) return;
+
+    float curHp = victim.Attributes[GameAttributes.Hitpoints_Cur];
+    float hpRatio = curHp / maxHp;
+
+    if (hpRatio > BloodBuildExecuteHpThreshold)
+        return;
+
+    AddBuff(victim, new BloodBuildExplosionLockout(WaitSeconds(BloodBuildExplosionCooldownSeconds)));
+
+    // Spawn a lightweight invisible proxy at the victim (simulated corpse).
+    var corpseProxy = SpawnProxy(victim.Position);
+
+    // Visual: clear blood proc FX (and keeps it lightweight).
+    SpawnBloodBuildExplosionFx(victim.Position);
+
+    TriggerBloodBuildExplosionAttack(victim.Position, chainDepth, chainDamageScale, corpseProxy);
+
+    // Detonate nearby real Necromancer corpses to strengthen the chain reaction feel.
+    DetonateNearbyRealCorpses(victim.Position, chainDepth, chainDamageScale);
+
+    corpseProxy?.Destroy();
+}
+
+private void TriggerBloodBuildExplosionAttack(Vector3D center, int chainDepth, float chainDamageScale, Actor sourceProxy)
+{
+    SpawnBloodBuildExplosionFx(center);
+
+    if (chainDamageScale <= 0f) return;
+
+    var explosion = new AttackPayload(this)
+    {
+        Targets = GetEnemiesInRadius(center, BloodBuildExplosionRadius)
+    };
+
+    explosion.AddWeaponDamage(BloodBuildExplosionDamage * chainDamageScale, DamageType.Physical);
+
+    explosion.OnHit = hit =>
+    {
+        // Mild extra VFX on each hit target.
+        SpawnEffect(ActorSno._p6_necro_bonespikes, hit.Target.Position, 0, WaitSeconds(0.1f));
+
+        // Chain reaction: only a couple of hops, and with diminishing damage.
+        if (chainDepth > 0)
+            TryTriggerBloodBuildExplosion(hit.Target, chainDepth - 1, chainDamageScale * 0.6f);
+    };
+
+    explosion.Apply();
+}
+
+private class BloodBuildExplosionLockout : Buff
+{
+    private readonly TickTimer _timeout;
+
+    public BloodBuildExplosionLockout(TickTimer timeout)
+    {
+        _timeout = timeout;
+    }
+
+    public override bool Update()
+    {
+        if (_timeout.TimedOut)
+        {
+            Remove();
+            return false;
+        }
+
+        return true;
+    }
+}
+
+// -----------------------------------------------------------------------------------------
         [ImplementsPowerBuff(6, true)]
         public class BustBuff : PowerBuff
         {
