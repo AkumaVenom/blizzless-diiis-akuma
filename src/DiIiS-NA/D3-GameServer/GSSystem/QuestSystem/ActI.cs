@@ -166,11 +166,23 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
                 OnAdvance = () =>
                 { //kill wretched mother
                     var world = Game.GetWorld(WorldSno.trout_town);
+
+                    // IMPORTANT: Register kill listeners BEFORE spawning/activating monsters.
+                    // Some builds can kill the Wretched Mother immediately, so the listener must exist first.
+                    ListenKill(ActorSno._zombiefemale_a_tristramquest_unique, 1, new Advance());
+                    ListenKill(ActorSno._zombiefemale_unique_wretchedqueen, 1, new Advance());
+
+                    Vector3D cartPos = null;
+
                     // When skipping the Leah Inn talk step, ensure the path forward is unblocked.
                     try
                     {
-                        if (world.GetActorBySNO(ActorSno._trout_newtristram_blocking_cart, true) != null)
-                            world.GetActorBySNO(ActorSno._trout_newtristram_blocking_cart, true).Hidden = true;
+                        var cartActor = world.GetActorBySNO(ActorSno._trout_newtristram_blocking_cart, true);
+                        if (cartActor != null)
+                        {
+                            cartPos = cartActor.Position;
+                            cartActor.Hidden = true;
+                        }
                     }
                     catch { }
 
@@ -183,6 +195,38 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
                     catch { }
 
                     Break(world, ActorSno._trout_wagon_barricade);
+
+                    // HARD FIX: Always spawn an extra quest-flagged Wretched Mother at the cart/barricade location.
+                    // This prevents occasional script/quest-state desync (e.g., when reselecting quest) from soft-locking the step.
+                    try
+                    {
+                        var player = world.Players.Values.FirstOrDefault() ?? Game.FirstPlayer();
+                        var fallbackPos = (player != null) ? player.Position : new Vector3D { X = 0f, Y = 0f, Z = 0f };
+
+                        // If cart position isn't available (already destroyed/hidden), use the wagon barricade position.
+                        if (cartPos == null)
+                        {
+                            var barricade = world.GetActorBySNO(ActorSno._trout_wagon_barricade, true);
+                            if (barricade != null)
+                                cartPos = barricade.Position;
+                        }
+
+                        var spawnPos = (cartPos != null) ? cartPos : fallbackPos;
+
+                        // Spawn the extra required target right here (even if other variants exist elsewhere).
+                        var forced = world.SpawnMonster(ActorSno._zombiefemale_unique_wretchedqueen, spawnPos.Around(2.5f));
+                        if (forced != null)
+                        {
+                            forced.Attributes[GameAttributes.Quest_Monster] = true;
+                            forced.Attributes.BroadcastChangedIfRevealed();
+                        }
+
+                        // Also make any existing variants count for the objective.
+                        ActivateQuestMonsters(world, ActorSno._zombiefemale_a_tristramquest_unique);
+                        ActivateQuestMonsters(world, ActorSno._zombiefemale_unique_wretchedqueen);
+                    }
+                    catch { }
+
 
                     // Fix soft-lock: the quest-required Wretched Mother sometimes fails to spawn.
                     // She can exist as different SNOs depending on scripts/world state, so ensure
@@ -244,10 +288,7 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
 
                     // Wretched Mother can spawn as different SNOs depending on scripts/world state; listen for both.
                     ActivateQuestMonsters(world, ActorSno._zombiefemale_a_tristramquest_unique);
-                    ActivateQuestMonsters(world, ActorSno._zombiefemale_unique_wretchedqueen);
-                    ListenKill(ActorSno._zombiefemale_a_tristramquest_unique, 1, new Advance());
-                    ListenKill(ActorSno._zombiefemale_unique_wretchedqueen, 1, new Advance());
-                }
+                    ActivateQuestMonsters(world, ActorSno._zombiefemale_unique_wretchedqueen);                }
             });
 
             Game.QuestManager.Quests[87700].Steps.Add(27, new QuestStep
