@@ -1,0 +1,16 @@
+--- a/src/DiIiS-NA/D3-GameServer/GSSystem/BotSystem/BotManager.cs
++++ b/src/DiIiS-NA/D3-GameServer/GSSystem/BotSystem/BotManager.cs
+@@ -52,10 +52,11 @@
+ 
+ 			try
+ 			{
++				// Allow combat mage bots to spawn in towns too (including the initial session world).
+ 				if (IsTownWorld(world))
+ 					EnsureTownBots(world);
+-				else
+-					EnsureCombatBots(world, anchorPlayer);
++
++				EnsureCombatBots(world, anchorPlayer);
+ 			}
+ 			catch (Exception ex)
+ 			{

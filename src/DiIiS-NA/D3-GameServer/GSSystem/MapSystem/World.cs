@@ -23,6 +23,7 @@ using DiIiS_NA.GameServer.GSSystem.GameSystem;
 using DiIiS_NA.GameServer.GSSystem.ItemsSystem;
 using DiIiS_NA.GameServer.GSSystem.ObjectsSystem;
 using DiIiS_NA.GameServer.GSSystem.PlayerSystem;
+using DiIiS_NA.GameServer.GSSystem.BotSystem;
 using DiIiS_NA.GameServer.GSSystem.PowerSystem;
 using DiIiS_NA.GameServer.MessageSystem;
 using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.ACD;
@@ -206,6 +207,11 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 		public BuffManager BuffManager => IsPvP ? _PvPBuffManager : _buffManager;
 
 		/// <summary>
+		/// Monster respawn scheduler (used by the server-side bot feature).
+		/// </summary>
+		public MonsterRespawnManager RespawnManager { get; }
+
+		/// <summary>
 		/// Creates a new world for the given game with given snoId.
 		/// </summary>
 		/// <param name="game">The parent game.</param>
@@ -229,6 +235,7 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 			};
 			_powerManager = new PowerManager();
 			_buffManager = new BuffManager();
+			RespawnManager = new MonsterRespawnManager(this);
 
 			Game.AddWorld(this);
 			//this.Game.StartTracking(this); // start tracking the dynamicId for the world.
@@ -322,6 +329,8 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 			{
 				UpdateFlippy(tickCounter);
 			}
+
+			RespawnManager?.Update(tickCounter);
 		}
 
 		#endregion
@@ -507,6 +516,10 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 			AddActor(actor);
 			actor.OnEnter(this);
 
+			// Spawn server-side bots once the first real player enters.
+			if (actor is Player p)
+				BotManager.EnsureWorldBots(this, p);
+
 			// reveal actor to player's in-range.
 			foreach (var player in actor.GetPlayersInRange())
 			{
@@ -530,6 +543,10 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 		public void Leave(Actor actor)
 		{
 			actor.OnLeave(this);
+
+			// If a monster was removed because it died, schedule a respawn (when enabled).
+			if (actor is Monster m)
+				RespawnManager?.OnMonsterRemoved(m);
 
 			foreach (var player in Players.Values)
 			{
