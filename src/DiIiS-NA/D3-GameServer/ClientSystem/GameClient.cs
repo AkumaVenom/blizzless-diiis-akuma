@@ -118,36 +118,9 @@ namespace DiIiS_NA.GameServer.ClientSystem
 		public void SendMessage(Opcodes opcode) => SendMessage(new SimpleMessage(opcode));
 		
 		private int _lastReplicatedTick;
-		
-        private long _lastLoadingHeartbeatTick = -1;
-
-        private void SendLoadingHeartbeatIfNeeded()
-        {
-            if (Player == null || Game == null) return;
-            if (!TickingEnabled) return;
-
-            if (Player.Attributes[GameAttributes.Loading] != true)
-            {
-                _lastLoadingHeartbeatTick = -1;
-                return;
-            }
-
-            // Send at most once per tick while loading
-            if (_lastLoadingHeartbeatTick == Game.TickCounter) return;
-
-            _lastLoadingHeartbeatTick = Game.TickCounter;
-
-            var tickMessage = new GameTickMessage(Game.TickCounter);
-            Logger.LogOutgoingPacket(tickMessage);
-            _outgoingBuffer.EncodeMessage(tickMessage);
-            Connection.Send(_outgoingBuffer.GetPacketAndReset());
-        }
-
-
 		public virtual void SendMessage(GameMessage message)
 		{
 			//System.Threading.Thread.Sleep(50);
-			SendLoadingHeartbeatIfNeeded();
 			lock (_outgoingBuffer)
 			{
 				if (Game.TickCounter > _lastReplicatedTick && TickingEnabled && message is not GameTickMessage /*&& !(message is EndOfTickMessage)*/ && !Player.BetweenWorlds)
