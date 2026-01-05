@@ -132,28 +132,29 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem
 
 			// Additional scaling (player-count/level scaling, etc.)
 			var bonus = CalculateLevelAdjustment(LevelAdjustmentEnum.LinearScaling, difficulty, connectedPlayers);
-            
-			Attributes[GameAttributes.Hitpoints_Max] = maxHP;
-            Attributes[GameAttributes.Hitpoints_Max_Percent_Bonus_Multiplicative] = bonus;
-
-			var baseHp = Attributes[GameAttributes.Hitpoints_Max] * bonus;
-			var scaledDmgMin = baseDmgMin * bonus;
-			var scaledDmgDelta = baseDmgDelta * bonus;
+			// Avoid non-positive/NaN multipliers that could produce invalid attribute values.
+			if (float.IsNaN(bonus) || float.IsInfinity(bonus) || bonus <= 0f)
+				bonus = 1f;
 
 			// Apply configuration modifiers (these are server-side knobs in GameModsConfig)
-			baseHp *= GameModsConfig.Instance.Monster.HealthMultiplier;
-			scaledDmgMin *= GameModsConfig.Instance.Monster.DamageMultiplier;
-			scaledDmgDelta *= GameModsConfig.Instance.Monster.DamageMultiplier;
+			var hpBase = maxHP * GameModsConfig.Instance.Monster.HealthMultiplier;
+			var scaledDmgMin = (baseDmgMin * bonus) * GameModsConfig.Instance.Monster.DamageMultiplier;
+			var scaledDmgDelta = (baseDmgDelta * bonus) * GameModsConfig.Instance.Monster.DamageMultiplier;
 
-			// Assign modified values
-			Attributes[GameAttributes.Hitpoints_Max_Total] = baseHp;
+			// IMPORTANT:
+			// Hitpoints_Max_Total and Damage_Weapon_*_Total are SCRIPTED attributes (see GameAttribute.List.cs).
+			// Writing to scripted, non-settable attributes triggers "illegal value assignment" logging
+			// (and leaks local source paths when built with PDBs). Instead, set the base attributes
+			// that the scripts depend on and let the engine compute the *_Total values.
 
-			// Monsters don't use item-based weapon rolls, so set the "total" weapon damage directly.
-			// HitPayload uses Damage_Weapon_Min_Total/Delta_Total for non-player attackers.
+			// Assign modified values (base attributes only)
+			Attributes[GameAttributes.Hitpoints_Max] = hpBase;
+			Attributes[GameAttributes.Hitpoints_Max_Percent_Bonus_Multiplicative] = bonus;
+
+			// Monsters don't use item-based weapon rolls, so setting base weapon damage is enough.
+			// Damage_Weapon_Min_Total/Delta_Total will be derived by scripts from these base values.
 			Attributes[GameAttributes.Damage_Weapon_Min, 0] = scaledDmgMin;
 			Attributes[GameAttributes.Damage_Weapon_Delta, 0] = scaledDmgDelta;
-			Attributes[GameAttributes.Damage_Weapon_Min_Total, 0] = scaledDmgMin;
-			Attributes[GameAttributes.Damage_Weapon_Delta_Total, 0] = scaledDmgDelta;
             //if (full_hp)
 			Attributes[GameAttributes.Hitpoints_Cur] = Attributes[GameAttributes.Hitpoints_Max_Total];
 
