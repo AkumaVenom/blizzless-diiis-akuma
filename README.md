@@ -31,7 +31,7 @@ DiIiS is a fully-functional open-source local server for [Diablo III: Reaper of 
 - Implemented LAN
 - Implemented Custom Feature: Diablo 4 Blood Build Necromancer mechanics to Blood Siphon & Death Nova Skills.
 - Implemented Custom Feature: Skeleton Mage Combat Party Bots System
-
+- Implemented Custom Feature: Akuma’s Hell on Earth demon mode
 
 ![Main](https://github.com/user-attachments/assets/50443ec8-de3e-49b7-a8dc-92004ad42af9)
 
