@@ -6,6 +6,7 @@ using DiIiS_NA.Core.Logging;
 using DiIiS_NA.Core.MPQ;
 using DiIiS_NA.Core.Helpers.Math;
 using DiIiS_NA.Core.MPQ.FileFormats;
+using DiIiS_NA.D3_GameServer;
 using DiIiS_NA.GameServer.Core.Types.TagMap;
 using DiIiS_NA.GameServer.Core.Types.SNO;
 using DiIiS_NA.GameServer.Core.Types.Math;
@@ -2509,6 +2510,10 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 			if (scene.SceneData.NoSpawn) return;
 
 			List<Affix> packAffixes = new List<Affix>();
+            int akumaDefaultStack = AkumaFeaturesConfig.Instance.HighMobDensityEnabled ? 10 : 6;
+            int akumaChampionStack = AkumaFeaturesConfig.Instance.HighMobDensityEnabled ? 6 : 4;
+            int akumaEliteStack = AkumaFeaturesConfig.Instance.HighMobDensityEnabled ? 7 : 5;
+
 			int packs_count = world.worldData.DynamicWorld ? 5 : 4;
 			packs_count += (Game.Difficulty / 3);
 
@@ -2522,6 +2527,14 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 
 			if (Game.Difficulty > 4)
 				packs_count += SpawnGenerator.Spawns[la].AdditionalDensity;
+
+            // Akuma feature: optional higher monster density in generated scenes.
+            if (AkumaFeaturesConfig.Instance.HighMobDensityEnabled)
+            {
+                // Double pack density but keep a safety cap to avoid runaway spawns.
+                packs_count = Math.Min(packs_count * 2, 30);
+            }
+
 
 			var groupId = 0;
 
@@ -2547,7 +2560,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 						if (rangedMonsterHandle == null) rangedMonsterHandle = meleeMonsterHandle;
 						else
 							if (meleeMonsterHandle == null) meleeMonsterHandle = rangedMonsterHandle;
-						for (int n = 0; n < 5; n++)
+						for (int n = 0; n < akumaEliteStack; n++)
 						{
 							if (n == 0 || FastRandom.Instance.NextDouble() < 0.85)
 							{
@@ -2590,7 +2603,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 							SNOHandle meleeMonsterHandle = (randomMeleeMonsterId == -1 ? null : new SNOHandle(randomMeleeMonsterId));
 							SNOHandle rangedMonsterHandle = (randomRangedMonsterId == -1 ? null : new SNOHandle(randomRangedMonsterId));
 							//int maxMobsInStack = (SpawnGenerator.IsMelee(la, randomMonsterId) ? 6 : (SpawnGenerator.IsDangerous(la, randomMonsterId) ? 1 : 3));
-							for (int n = 0; n < 6; n++)
+							for (int n = 0; n < akumaDefaultStack; n++)
 							{
 								if (n == 0 || FastRandom.Instance.NextDouble() < 0.6)
 								{
@@ -2619,7 +2632,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 						{
 							SNOHandle championHandle = new SNOHandle(SpawnGenerator.Spawns[la].Melee.PickRandom());
 							groupId = FastRandom.Instance.Next();
-							for (int n = 0; n < 4; n++)
+							for (int n = 0; n < akumaChampionStack; n++)
 							{
 								if (n == 0 || FastRandom.Instance.NextDouble() < 0.85)
 								{
@@ -2661,6 +2674,10 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 			try
 			{
 				var actorSno = (ActorSno)actorHandle.Id; // TODO: maybe we can replace SNOHandle
+			// Akuma's Hell on Earth (optional) - demonizes regular monster spawns while protecting quests/bosses.
+			if (AkumaHellOnEarth.TryGetReplacement(world, actorSno, tagMap, out var hellOnEarthSno))
+				actorSno = hellOnEarthSno;
+
 				if (world.QuadTree
 					    .Query<Waypoint>(new Core.Types.Misc.Circle(location.Vector3D.X, location.Vector3D.Y, 60f))
 					    .Count > 0 ||
@@ -2712,6 +2729,10 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 		public void LazyLoadActor(SNOHandle actorHandle, PRTransform location, World world, TagMap tagMap, MonsterType monsterType = MonsterType.Default)
 		{
 			var actorSno = (ActorSno)actorHandle.Id; // TODO: maybe we can replace SNOHandle
+			// Akuma's Hell on Earth (optional) - demonizes regular monster spawns while protecting quests/bosses.
+			if (AkumaHellOnEarth.TryGetReplacement(world, actorSno, tagMap, out var hellOnEarthSno))
+				actorSno = hellOnEarthSno;
+
 			if (world.QuadTree.Query<Waypoint>(new DiIiS_NA.GameServer.Core.Types.Misc.Circle(location.Vector3D.X, location.Vector3D.Y, 60f)).Count > 0 ||
 				world.QuadTree.Query<Portal>(new DiIiS_NA.GameServer.Core.Types.Misc.Circle(location.Vector3D.X, location.Vector3D.Y, 40f)).Count > 0)
 			{
