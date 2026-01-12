@@ -9,6 +9,10 @@ using DiIiS_NA.GameServer.GSSystem.TickerSystem;
 using DiIiS_NA.GameServer.GSSystem.PlayerSystem;
 using DiIiS_NA.GameServer.GSSystem.MapSystem;
 using DiIiS_NA.GameServer.GSSystem.ActorSystem.Movement;
+using DiIiS_NA.D3_GameServer;
+using DiIiS_NA.Core.Logging;
+using DiIiS_NA.Core.MPQ;
+using DiIiS_NA.GameServer.Core.Types.SNO;
 
 namespace DiIiS_NA.GameServer.GSSystem.AISystem.Brains
 {
@@ -23,9 +27,100 @@ namespace DiIiS_NA.GameServer.GSSystem.AISystem.Brains
 	/// </summary>
 	public sealed class BotBrain : Brain
 	{
-		// Power SNO: Weapon_Ranged_Instant
-        private const int BotAttackPowerSno = 30796; // Purple_MagicPulse
+		// Default Power SNO: Weapon_Ranged_Instant (Purple_MagicPulse)
+		private const int DefaultBotAttackPowerSno = 30796;
 
+		private static readonly Logger Logger = LogManager.CreateLogger();
+		private static readonly object AttackPowerInitLock = new();
+		private static bool _attackPowerInitialized;
+		private static int _attackPowerSno = DefaultBotAttackPowerSno;
+
+		/// <summary>
+		/// Resolves the combat-bot attack power from [Bots] CombatBotAttackPower.
+		/// Supports either a numeric PowerSNO id (e.g. 30796) or a Power asset name (e.g. Purple_MagicPulse).
+		/// </summary>
+		private static int GetBotAttackPowerSno()
+		{
+			if (_attackPowerInitialized) return _attackPowerSno;
+
+			lock (AttackPowerInitLock)
+			{
+				if (_attackPowerInitialized) return _attackPowerSno;
+
+				var configured = BotsConfig.Instance.CombatBotAttackPower?.Trim();
+				if (string.IsNullOrWhiteSpace(configured))
+				{
+					_attackPowerSno = DefaultBotAttackPowerSno;
+					_attackPowerInitialized = true;
+					return _attackPowerSno;
+				}
+
+				try
+				{
+					// 1) Numeric PowerSNO id
+					if (int.TryParse(configured, out var snoId))
+					{
+						if (IsValidPowerSno(snoId))
+						{
+							_attackPowerSno = snoId;
+							Logger.Info($"[Bots] CombatBotAttackPower resolved to PowerSNO {snoId}.");
+						}
+						else
+						{
+							_attackPowerSno = DefaultBotAttackPowerSno;
+							Logger.Warn($"[Bots] CombatBotAttackPower={configured} is not a valid PowerSNO. Falling back to {DefaultBotAttackPowerSno}.");
+						}
+						_attackPowerInitialized = true;
+						return _attackPowerSno;
+					}
+
+					// 2) Name lookup
+					var assets = MPQStorage.Data.Assets[SNOGroup.Power].Values;
+					var exact = assets.Where(a => a != null && a.Name.Equals(configured, StringComparison.OrdinalIgnoreCase)).ToList();
+					var matches = exact.Count > 0
+						? exact
+						: assets.Where(a => a != null && a.Name.IndexOf(configured, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+
+					if (matches.Count == 1)
+					{
+						_attackPowerSno = matches[0].SNOId;
+						Logger.Info($"[Bots] CombatBotAttackPower '{configured}' resolved to PowerSNO {_attackPowerSno} ({matches[0].Name}).");
+					}
+					else if (matches.Count > 1)
+					{
+						// Prefer an exact match if present; otherwise pick the lowest SNO id to be deterministic.
+						var chosen = matches.OrderBy(m => m.SNOId).First();
+						_attackPowerSno = chosen.SNOId;
+						Logger.Warn($"[Bots] CombatBotAttackPower '{configured}' matched {matches.Count} powers; using {chosen.SNOId} ({chosen.Name}). Consider using a more specific name or a numeric SNO id.");
+					}
+					else
+					{
+						_attackPowerSno = DefaultBotAttackPowerSno;
+						Logger.Warn($"[Bots] CombatBotAttackPower '{configured}' did not match any power. Falling back to {DefaultBotAttackPowerSno}.");
+					}
+				}
+				catch (Exception ex)
+				{
+					_attackPowerSno = DefaultBotAttackPowerSno;
+					Logger.Warn($"[Bots] Failed to resolve CombatBotAttackPower '{configured}'. Falling back to {DefaultBotAttackPowerSno}. Error: {ex.Message}");
+				}
+
+				_attackPowerInitialized = true;
+				return _attackPowerSno;
+			}
+		}
+
+		private static bool IsValidPowerSno(int snoId)
+		{
+			try
+			{
+				return MPQStorage.Data.Assets.TryGetValue(SNOGroup.Power, out var group) && group.ContainsKey(snoId);
+			}
+			catch
+			{
+				return false;
+			}
+		}
         private readonly Player _anchor;
 		private readonly int _slot;
 		private readonly float _scanRadius;
@@ -104,7 +199,7 @@ namespace DiIiS_NA.GameServer.GSSystem.AISystem.Brains
 			_attackCooldown = null;
 
 			Body.TranslateFacing(targetPos, false);
-			CurrentAction = new PowerAction(Body, BotAttackPowerSno, _target);
+			CurrentAction = new PowerAction(Body, GetBotAttackPowerSno(), _target);
 		}
 
 		private void ResetAndTeleportNearAnchor(Vector3D anchorPos)

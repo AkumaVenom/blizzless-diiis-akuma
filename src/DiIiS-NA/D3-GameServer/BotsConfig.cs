@@ -63,6 +63,22 @@ namespace DiIiS_NA.D3_GameServer
 			get => GetString(nameof(CombatBotModels), "_p6_necro_skeletonmage_a,_p6_necro_skeletonmage_b,_p6_necro_skeletonmage_c,_p6_necro_skeletonmage_d,_p6_necro_skeletonmage_e");
 			set => Set(nameof(CombatBotModels), value);
 		}
+
+
+		/// <summary>
+		/// Attack power used by combat bots.
+		/// Value can be either:
+		///  - a numeric PowerSNO id (e.g. 30796)
+		///  - a Power asset name (e.g. Purple_MagicPulse)
+		///
+		/// Tip: in-game console command `lookup power <pattern>` can help you find power names/ids.
+		/// </summary>
+		public string CombatBotAttackPower
+		{
+			get => GetString(nameof(CombatBotAttackPower), "30796");
+			set => Set(nameof(CombatBotAttackPower), value);
+		}
+
 		public static BotsConfig Instance { get; } = new();
 
 		private BotsConfig() : base("Bots")
