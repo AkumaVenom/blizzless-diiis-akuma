@@ -37,7 +37,8 @@ namespace DiIiS_NA.GameServer.GSSystem.BotSystem
 		private static readonly ConcurrentDictionary<int, object> GameLocks = new();
 
 		// A small pool of "minion-like" actor SNOs that have valid monster data + basic attacks.
-		private static readonly ActorSno[] CombatBotSnos =
+		// Default pool of "minion-like" actor SNOs that have valid monster data + basic attacks.
+		private static readonly ActorSno[] DefaultCombatBotSnos =
 		{
 			ActorSno._p6_necro_skeletonmage_a,
 			ActorSno._p6_necro_skeletonmage_b,
@@ -45,6 +46,69 @@ namespace DiIiS_NA.GameServer.GSSystem.BotSystem
 			ActorSno._p6_necro_skeletonmage_d,
 			ActorSno._p6_necro_skeletonmage_e,
 		};
+
+		// Configurable combat bot model list (see [Bots] CombatBotModels in config.ini).
+		private static readonly object CombatBotSnoLock = new();
+		private static string _cachedCombatBotModels;
+		private static ActorSno[] _cachedCombatBotSnos;
+
+		private static ActorSno[] GetCombatBotSnos()
+		{
+			var models = BotsConfig.Instance.CombatBotModels ?? string.Empty;
+			lock (CombatBotSnoLock)
+			{
+				if (_cachedCombatBotSnos != null && string.Equals(_cachedCombatBotModels, models, StringComparison.Ordinal))
+					return _cachedCombatBotSnos;
+
+				_cachedCombatBotModels = models;
+
+				var tokens = (models ?? string.Empty)
+					.Split(new[] { ',', ';', ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+					.Select(t => t.Trim())
+					.Where(t => t.Length > 0)
+					.ToArray();
+
+				var parsed = new List<ActorSno>();
+				foreach (var raw in tokens)
+				{
+					var token = raw;
+					if (token.StartsWith("ActorSno.", StringComparison.OrdinalIgnoreCase))
+						token = token.Substring("ActorSno.".Length);
+
+					// Allow users to omit the leading underscore.
+					if (!token.StartsWith("_", StringComparison.Ordinal) && token.Length > 0)
+						token = "_" + token;
+
+					ActorSno sno;
+					if (int.TryParse(token, out var numeric))
+					{
+						sno = (ActorSno)numeric;
+					}
+					else if (!Enum.TryParse(token, true, out sno))
+					{
+						Logger.Warn($"[Bots] CombatBotModels entry '{raw}' is not a valid ActorSno name. Ignoring.");
+						continue;
+					}
+
+					if (sno == ActorSno.__NONE)
+						continue;
+
+					if (!parsed.Contains(sno))
+						parsed.Add(sno);
+				}
+
+				if (parsed.Count == 0)
+				{
+					_cachedCombatBotSnos = DefaultCombatBotSnos;
+				}
+				else
+				{
+					_cachedCombatBotSnos = parsed.ToArray();
+				}
+
+				return _cachedCombatBotSnos;
+			}
+		}
 
 		/// <summary>
 		/// Ensures bots exist for the given world (idempotent).
@@ -119,7 +183,8 @@ namespace DiIiS_NA.GameServer.GSSystem.BotSystem
 					for (int i = 0; i < toSpawn; i++)
 					{
 						var slot = ids.Count; // next slot
-						var sno = CombatBotSnos[slot % CombatBotSnos.Length];
+						var snoPool = GetCombatBotSnos();
+						var sno = snoPool[slot % snoPool.Length];
 						var pos = FormationPoint(origin, slot, 10f);
 						if (!world.CheckLocationForFlag(pos, DiIiS_NA.Core.MPQ.FileFormats.Scene.NavCellFlags.AllowWalk))
 							pos = origin;

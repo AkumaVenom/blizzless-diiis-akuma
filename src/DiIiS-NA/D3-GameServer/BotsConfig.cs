@@ -53,6 +53,16 @@ namespace DiIiS_NA.D3_GameServer
 			set => Set(nameof(MobRespawnMaxSeconds), value);
 		}
 
+		/// <summary>
+		/// Comma/semicolon/space-separated list of ActorSNO names to use as the visual/model for combat bots.
+		/// Example: _p6_necro_skeletonmage_a, _p6_necro_skeletonmage_b
+		/// If empty or invalid, the server falls back to the built-in default Skeleton Mage pool.
+		/// </summary>
+		public string CombatBotModels
+		{
+			get => GetString(nameof(CombatBotModels), "_p6_necro_skeletonmage_a,_p6_necro_skeletonmage_b,_p6_necro_skeletonmage_c,_p6_necro_skeletonmage_d,_p6_necro_skeletonmage_e");
+			set => Set(nameof(CombatBotModels), value);
+		}
 		public static BotsConfig Instance { get; } = new();
 
 		private BotsConfig() : base("Bots")
