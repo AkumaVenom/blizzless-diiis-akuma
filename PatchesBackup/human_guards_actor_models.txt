@@ -1,0 +1,108 @@
+Blizzless-D3 (DiIiS-NA) - Human Guard Actor Models (ActorSno)
+Format: ActorSno._<name> = <snoId>
+
+== Tristram Guards (Act I) ==
+ActorSno._a1c4tristramguard_a = 2892
+ActorSno._a1c5tristramguard_a = 58163
+ActorSno._px_camp_tristramguard_b_fighter = 434368
+ActorSno._px_camp_tristramguard_b_unarmed = 434369
+ActorSno._tristramfloatguard = 5997
+ActorSno._tristramgateguardr = 5998
+ActorSno._tristramguard_a = 5999
+ActorSno._tristramguard_a_ghost = 158122
+ActorSno._tristramguard_b = 465
+ActorSno._tristramguard_c = 6002
+ActorSno._tristramguard_c_gateattack = 219252
+ActorSno._tristramguard_c_unarmed = 102342
+ActorSno._tristramguard_onelastentry = 170245
+
+== Caldeum / Imperial Guards (Act II) ==
+ActorSno._caldeumguard_a = 60772
+ActorSno._caldeumguard_captain_a = 3543
+ActorSno._caldeumguard_captain_b = 3544
+ActorSno._caldeumguard_captain_b_ravd = 164057
+ActorSno._caldeumguard_cleaver_a = 3546
+ActorSno._caldeumguard_cleaver_a_alcarnuscaptain = 170220
+ActorSno._caldeumguard_cleaver_a_jarulf = 164195
+ActorSno._caldeumguard_cleaver_a_thadar = 204665
+ActorSno._caldeumguard_cleaver_a_town = 181857
+ActorSno._caldeumguard_cleaver_a_wahid = 163547
+ActorSno._caldeumguard_spear_a = 3561
+ActorSno._caldeumguard_spear_b = 337
+ActorSno._caldeumguard_spear_b_nowander = 57470
+ActorSno._caldeumguard_spear_imperial = 81857
+ActorSno._caldeumguard_spear_imperial_town = 181858
+ActorSno._supercaldeumguard_cleaver_a = 5509
+ActorSno._supercaldeumguard_spear_b = 90958
+
+== Bastion's Keep Rampart Guard ==
+ActorSno._a3_rampart_guard_captain = 106146
+ActorSno._a3_rampart_guard_captain_alt = 162406
+
+== Bastion's Keep Guards (Act III) ==
+ActorSno._bastionskeepguard_melee_a_01 = 118260
+ActorSno._bastionskeepguard_melee_a_01_bennoc = 200865
+ActorSno._bastionskeepguard_melee_a_01_frosty = 200705
+ActorSno._bastionskeepguard_melee_a_01_hubguard = 201646
+ActorSno._bastionskeepguard_melee_a_01_krist = 202800
+ActorSno._bastionskeepguard_melee_a_01_nowander = 129579
+ActorSno._bastionskeepguard_melee_a_01_nowander_dying = 208724
+ActorSno._bastionskeepguard_melee_a_01_npc = 138472
+ActorSno._bastionskeepguard_melee_a_01_npc_banner = 192567
+ActorSno._bastionskeepguard_melee_a_01_npc_bat_gate1 = 192099
+ActorSno._bastionskeepguard_melee_a_01_npc_bat_gate2 = 192107
+ActorSno._bastionskeepguard_melee_a_01_npc_battlefieldfollower = 229970
+ActorSno._bastionskeepguard_melee_a_01_npc_fodder = 200674
+ActorSno._bastionskeepguard_melee_a_01_npc_frosty = 200706
+ActorSno._bastionskeepguard_melee_a_01_npc_gate1 = 191458
+ActorSno._bastionskeepguard_melee_a_01_npc_gate2 = 191459
+ActorSno._bastionskeepguard_melee_a_01_npc_morgan = 190884
+ActorSno._bastionskeepguard_melee_a_01_npc_super = 214110
+ActorSno._bastionskeepguard_melee_a_01_rmpt_atk_warning = 159085
+ActorSno._bastionskeepguard_melee_a_01_small_awareness = 208638
+ActorSno._bastionskeepguard_melee_a_01_stationedguard = 205189
+ActorSno._bastionskeepguard_melee_a_02 = 118261
+ActorSno._bastionskeepguard_melee_a_02_injured = 205178
+ActorSno._bastionskeepguard_melee_a_02_npc = 149346
+ActorSno._bastionskeepguard_melee_a_02_npc_beginningguard = 182322
+ActorSno._bastionskeepguard_melee_a_02_npc_rescueescort = 174995
+ActorSno._bastionskeepguard_melee_b_01 = 160466
+ActorSno._bastionskeepguard_melee_b_02 = 160468
+ActorSno._bastionskeepguard_melee_b_02_sgt_dalen = 196150
+ActorSno._bastionskeepguard_ranged_a_01_fireatnothing = 180919
+ActorSno._bastionskeepguard_ranged_a_01_nowander = 129519
+ActorSno._bastionskeepguard_ranged_a_01_npc = 147862
+ActorSno._bastionskeepguard_ranged_a_01_npc_battlefieldfollower = 229968
+ActorSno._bastionskeepguard_ranged_a_02_injured = 205180
+ActorSno._bastionskeepguard_ranged_b_02_injured = 206088
+ActorSno._px_bounty_bastionskeepguard_prisoner = 433181
+ActorSno._px_camp_bastionskeepguard_melee_a_01 = 434764
+ActorSno._x1_bastionskeepguard_westmarch_captaintollifer = 318548
+
+== Westmarch Guards (Reaper of Souls) ==
+ActorSno._x1_westm_dungeonguard = 298082
+ActorSno._x1_westm_guardhelm = 361671
+ActorSno._x1_westm_guardunarmed = 362113
+ActorSno._x1_westmarch_guard_female = 356451
+ActorSno._x1_westmarch_guard_female_melee_a = 373948
+ActorSno._x1_westmarch_guard_female_melee_b = 373949
+ActorSno._x1_westmarch_guard_female_ranged_a = 373956
+ActorSno._x1_westmarchguard_melee_a_01 = 312131
+ActorSno._x1_westmarchguard_melee_a_02 = 312132
+ActorSno._x1_westmarchguard_melee_a_circleofdeath = 350451
+ActorSno._x1_westmarchguard_ranged_a_01 = 312133
+ActorSno._x1_westmarchguard_ranged_a_01_rescueguards_ = 356892
+ActorSno._x1_westmarchguard_ranged_a_02__rescueguards_ = 356891
+ActorSno._x1_westmarchguard_ranged_a_super = 343352
+ActorSno._x1_westmhub_guard = 284568
+ActorSno._x1_westmhub_guard_nolos_knownwithscene = 378376
+ActorSno._x1_westmhub_guard_patrol = 362440
+ActorSno._x1_westmhub_guardnohelm = 361670
+ActorSno._x1_westmhub_guardnohelmunarmed = 362323
+ActorSno._x1_westmhub_prisonguard = 295512
+
+== Other (Leoric's Jail Guard) ==
+ActorSno._a1dun_leor_jail_sittingguard_a = 97381
+
+== Other ==
+ActorSno._markerlocation_rampartguards = 378119
