@@ -25,6 +25,7 @@ using DiIiS_NA.GameServer.GSSystem.ObjectsSystem;
 using DiIiS_NA.GameServer.GSSystem.PlayerSystem;
 using DiIiS_NA.GameServer.GSSystem.BotSystem;
 using DiIiS_NA.GameServer.GSSystem.PowerSystem;
+using DiIiS_NA.GameServer.GSSystem.TickerSystem;
 using DiIiS_NA.GameServer.MessageSystem;
 using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.ACD;
 using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.Animation;
@@ -45,6 +46,54 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 		static readonly Logger Logger = LogManager.CreateLogger();
 		public readonly Dictionary<World, List<Item>> DbItems = new(); //we need this list to delete item_instances from items which have no owner anymore.
 		public readonly Dictionary<ulong, Item> CachedItems = new();
+
+
+		// Ground loot cleanup: remove unpicked items/gold after a short delay to prevent sessions filling up with loot.
+		private readonly object _groundLootCleanupLock = new();
+		private readonly Dictionary<uint, TickTimer> _groundLootCleanupTimers = new();
+		private const float GroundLootCleanupSeconds = 180f; // 3 minutes
+
+		internal void ScheduleGroundLootCleanup(Item item)
+		{
+			if (item == null || Game == null) return;
+			if (item.World != this) return;
+			if (item.Owner != null) return; // already owned (inventory / picked up)
+			if (!item.HasWorldLocation) return;
+
+			lock (_groundLootCleanupLock)
+			{
+				if (_groundLootCleanupTimers.ContainsKey(item.GlobalID))
+					return;
+
+				_groundLootCleanupTimers[item.GlobalID] = TickTimer.WaitSeconds(Game, GroundLootCleanupSeconds, _ =>
+				{
+					try
+					{
+						// Only destroy if still sitting on the ground.
+						if (item.World == this && item.Owner == null && item.HasWorldLocation)
+							item.Destroy();
+					}
+					catch
+					{
+						// ignore; cleanup must never crash the game loop
+					}
+				});
+			}
+		}
+
+		internal void UnregisterGroundLootCleanup(Item item)
+		{
+			if (item == null) return;
+			UnregisterGroundLootCleanup(item.GlobalID);
+		}
+
+		internal void UnregisterGroundLootCleanup(uint itemGlobalId)
+		{
+			lock (_groundLootCleanupLock)
+			{
+				_groundLootCleanupTimers.Remove(itemGlobalId);
+			}
+		}
 
 		public int LastCEId = 3000;
 
@@ -324,6 +373,10 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 
 			BuffManager.Update();
 			PowerManager.Update();
+
+
+			UpdateGroundLootCleanup(tickCounter);
+			CleanupNecromancerCorpses(tickCounter);
 
 			if (tickCounter % 6 == 0 && _flippyTimers.Any())
 			{
@@ -1069,8 +1122,63 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 			var item = ItemGenerator.CreatePowerGlobe(player);
 			DropItem(source, player, item);
 		}
-		/// <summary>
-		/// Update the flippy animations and remove them once they have timed out
+		
+
+
+/// <summary>
+/// Periodically cleans up Necromancer corpses that were not consumed/exploded, to avoid unbounded actor growth.
+/// </summary>
+private const int NecroCorpseCleanupIntervalTicks = 60; // ~1 second (TickCounter units)
+
+private void CleanupNecromancerCorpses(int tickCounter)
+{
+    if (Game == null)
+        return;
+
+    if (tickCounter % NecroCorpseCleanupIntervalTicks != 0)
+        return;
+
+    int lifetimeTicks = (int)(1000f / Game.UpdateFrequency * Game.TickRate * 60f); // 60 seconds
+
+    foreach (var corpse in Actors.Values.OfType<ActorSystem.Implementations.NecromancerFlesh>().ToArray())
+    {
+        if (corpse == null || corpse.World != this)
+            continue;
+
+        int expireTick = corpse.ExpireTick > 0 ? corpse.ExpireTick : corpse.SpawnTick + lifetimeTicks;
+        if (expireTick <= 0)
+            expireTick = tickCounter + 1;
+
+        if (tickCounter >= expireTick)
+        {
+            corpse.SuppressOnDestroyEffects = true;
+            corpse.Destroy();
+        }
+    }
+}
+
+private void UpdateGroundLootCleanup(int tickCounter)
+{
+    lock (_groundLootCleanupLock)
+    {
+        if (_groundLootCleanupTimers.Count == 0)
+            return;
+
+        foreach (var timer in _groundLootCleanupTimers.Values)
+            timer.Update(tickCounter);
+
+        var expiredIds = _groundLootCleanupTimers
+            .Where(kv => kv.Value.TimedOut)
+            .Select(kv => kv.Key)
+            .ToList();
+
+        foreach (var id in expiredIds)
+            _groundLootCleanupTimers.Remove(id);
+    }
+}
+
+/// <summary>
+			/// Update the flippy animations and remove them once they have timed out
 		/// </summary>
 		/// <param name="tickCounter"></param>
 		private void UpdateFlippy(int tickCounter)

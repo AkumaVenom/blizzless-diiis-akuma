@@ -107,6 +107,7 @@ namespace DiIiS_NA
                 Maximize();
             WriteBanner();
             InitLoggers();
+            ApplyProcessPriorityFromConfig();
 #if DEBUG
             _diabloCoreEnabled = true;
             Logger.Info("Forcing Diablo III Core to be $[green]$enabled$[/]$ on debug mode.");
@@ -385,6 +386,27 @@ namespace DiIiS_NA
 
         static int TargetsEnabled(string target) => LogConfig.Instance.Targets.Count(t => t.Target.ToLower() == target && t.Enabled);
         public static bool IsTargetEnabled(string target) => TargetsEnabled(target) > 0;
+        private static void ApplyProcessPriorityFromConfig()
+        {
+            try
+            {
+                // Explicitly set the server process priority based on config.
+                // This ensures that when HighProcessPriority=false, the process is forced back to Normal.
+                var high = DiIiS_NA.GameServer.GameServerConfig.Instance.HighProcessPriority;
+                var desired = high ? ProcessPriorityClass.High : ProcessPriorityClass.Normal;
+
+                var proc = Process.GetCurrentProcess();
+                if (proc.PriorityClass != desired)
+                    proc.PriorityClass = desired;
+
+                Logger.Info($"Process priority set to {proc.PriorityClass} (HighProcessPriority={high}).");
+            }
+            catch (Exception ex)
+            {
+                // Do not crash the server if priority cannot be changed due to permissions/policy.
+                Logger.WarnException(ex, "Unable to change process priority; continuing with current priority.");
+            }
+        }
         private static void InitLoggers()
         {
             LogManager.Enabled = true;

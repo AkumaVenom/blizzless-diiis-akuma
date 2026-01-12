@@ -294,13 +294,14 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem
 		public override void Destroy()
 		{
 			if (_isDestroyed) return;
-			if (SNO == ActorSno._p6_necro_corpse_flesh)
-				if (World != null)
-					foreach (var plr in World.Game.Players.Values)
-						if (plr.SkillSet.HasPassive(208594) && DiIiS_NA.Core.Helpers.Math.RandomHelper.Next(0,100) > 45)
-							World.SpawnHealthGlobe(this, plr, Position);
+			var necroCorpse = this as ActorSystem.Implementations.NecromancerFlesh;
+				if (SNO == ActorSno._p6_necro_corpse_flesh && (necroCorpse == null || !necroCorpse.SuppressOnDestroyEffects))
+					if (World != null)
+						foreach (var plr in World.Game.Players.Values)
+							if (plr.SkillSet.HasPassive(208594) && DiIiS_NA.Core.Helpers.Math.RandomHelper.Next(0,100) > 45)
+								World.SpawnHealthGlobe(this, plr, Position);
 
-			if (_questRange != null)
+if (_questRange != null)
 				if (World == null)
 					Logger.Debug("World is null? {0}", GetType());
 				else if (World.Game == null)

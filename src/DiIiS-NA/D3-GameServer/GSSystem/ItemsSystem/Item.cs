@@ -830,7 +830,31 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
             EnterWorld(position);
         }
 
-        public override void OnTargeted(Player player, TargetMessage message)
+        
+
+
+		
+
+
+		public override void EnterWorld(Vector3D position)
+		{
+			base.EnterWorld(position);
+
+			// Schedule cleanup for ground loot that is never picked up (items + gold).
+			// Only schedule for items with no owner (i.e. sitting on the ground).
+			if (World != null && Owner == null && HasWorldLocation)
+				World.ScheduleGroundLootCleanup(this);
+		}
+
+		public override void Destroy()
+		{
+			// Ensure any scheduled ground-loot cleanup timer is removed.
+			World?.UnregisterGroundLootCleanup(this);
+			base.Destroy();
+		}
+
+
+		public override void OnTargeted(Player player, TargetMessage message)
         {
 
             player.Inventory.RefreshInventoryToClient();

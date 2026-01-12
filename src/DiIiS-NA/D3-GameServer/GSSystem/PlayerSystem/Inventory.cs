@@ -223,6 +223,7 @@ namespace DiIiS_NA.GameServer.GSSystem.PlayerSystem
 
 				if (_owner.GroundItems.ContainsKey(item.GlobalID))
 					_owner.GroundItems.Remove(item.GlobalID);
+				_owner.World?.UnregisterGroundLootCleanup(item);
 				success = true;
 				item.CurrentState = ItemState.Normal;
 

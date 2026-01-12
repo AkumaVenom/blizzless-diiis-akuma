@@ -14,6 +14,42 @@ namespace DiIiS_NA.GameServer
 			set => Set(nameof(Enabled), value);
 		}
 
+		public bool HighProcessPriority
+		{
+			get => ParseBoolLoose(GetString(nameof(HighProcessPriority), "true"), true);
+			set => Set(nameof(HighProcessPriority), value);
+		}
+
+		private static bool ParseBoolLoose(string? raw, bool defaultValue)
+		{
+			if (string.IsNullOrWhiteSpace(raw)) return defaultValue;
+			// Support inline comments like: false ; comment
+			var v = raw;
+			var semi = v.IndexOf(';');
+			if (semi >= 0) v = v.Substring(0, semi);
+			var hash = v.IndexOf('#');
+			if (hash >= 0) v = v.Substring(0, hash);
+			v = v.Trim();
+			if (v.Length == 0) return defaultValue;
+			switch (v.ToLowerInvariant())
+			{
+				case "1":
+				case "true":
+				case "yes":
+				case "y":
+				case "on":
+					return true;
+				case "0":
+				case "false":
+				case "no":
+				case "n":
+				case "off":
+					return false;
+				default:
+					return defaultValue;
+			}
+		}
+
 		public string BindIP
 		{
 			get => GetString(nameof(BindIP), "127.0.0.1");
