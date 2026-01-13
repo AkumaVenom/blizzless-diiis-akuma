@@ -592,6 +592,10 @@ private const float BloodBuildExecuteHpThreshold = 0.40f;
 private const float BloodBuildExplosionRadius = 10f;
 private const float BloodBuildExplosionDamage = 1.75f; // weapon damage multiplier (kept moderate)
 private const float BloodBuildExplosionCooldownSeconds = 0.8f;
+	// Smooth CPU spikes when many enemies cross the execute threshold at once.
+	// Keeps gameplay feel (procs still happen), but prevents a single server tick from detonating dozens of chains.
+	private const float BloodBuildExecBurstWindowSeconds = 0.20f;
+	private const int BloodBuildExecMaxProcsPerBurstWindow = 2;
 private const int BloodBuildMaxSiphonTargets = 5;
 private const float BloodBuildMaxScreenDistanceToPlayer = 60f; // "end of screen" heuristic
 private const float BloodBuildCorpseChainRadius = 11f;
@@ -612,15 +616,17 @@ private void DetonateNearbyRealCorpses(Vector3D center, int chainDepth, float ch
 {
     if (chainDepth <= 0 || chainDamageScale <= 0f) return;
 
-    // Find existing Necromancer corpses and detonate a limited number for chain reactions.
-    var corpses = User.GetActorsInRange(center, BloodBuildCorpseChainRadius)
-        .Where(a => a != null && !a.Dead && a.SNO == ActorSno._p6_necro_corpse_flesh)
-        .Take(BloodBuildMaxCorpsesToDetonatePerExplosion)
-        .ToList();
-
-    foreach (var corpse in corpses)
+	    // Find existing Necromancer corpses and detonate a limited number for chain reactions.
+	    // NOTE: GetActorsInRange already allocates a list; avoid additional LINQ allocations and ToList().
+	    var nearby = User.GetActorsInRange(center, BloodBuildCorpseChainRadius);
+	    if (nearby == null || nearby.Count == 0) return;
+	
+	    int detonated = 0;
+	    for (int i = 0; i < nearby.Count && detonated < BloodBuildMaxCorpsesToDetonatePerExplosion; i++)
     {
-        SpawnBloodBuildExplosionFx(corpse.Position);
+	        var corpse = nearby[i];
+	        if (corpse == null || corpse.Dead) continue;
+	        if (corpse.SNO != ActorSno._p6_necro_corpse_flesh) continue;
 
         // Re-use the same explosion logic, but scaled down to avoid making it too easy.
         TriggerBloodBuildExplosionAttack(corpse.Position,
@@ -629,6 +635,7 @@ private void DetonateNearbyRealCorpses(Vector3D center, int chainDepth, float ch
             corpse);
 
         corpse.Destroy();
+	        detonated++;
     }
 }
 
@@ -650,13 +657,15 @@ private void TryTriggerBloodBuildExplosion(Actor victim, int chainDepth, float c
     if (hpRatio > BloodBuildExecuteHpThreshold)
         return;
 
+	    // Burst limiter (per-user) to smooth large execute waves into a couple of procs over a few ticks.
+	    // Checked late so we don't consume budget on ineligible targets.
+	    if (!TryConsumeBloodBuildExecProc())
+	        return;
+
     AddBuff(victim, new BloodBuildExplosionLockout(WaitSeconds(BloodBuildExplosionCooldownSeconds)));
 
     // Spawn a lightweight invisible proxy at the victim (simulated corpse).
     var corpseProxy = SpawnProxy(victim.Position);
-
-    // Visual: clear blood proc FX (and keeps it lightweight).
-    SpawnBloodBuildExplosionFx(victim.Position);
 
     TriggerBloodBuildExplosionAttack(victim.Position, chainDepth, chainDamageScale, corpseProxy);
 
@@ -668,7 +677,8 @@ private void TryTriggerBloodBuildExplosion(Actor victim, int chainDepth, float c
 
 private void TriggerBloodBuildExplosionAttack(Vector3D center, int chainDepth, float chainDamageScale, Actor sourceProxy)
 {
-    SpawnBloodBuildExplosionFx(center);
+	    // FX once per explosion (avoid double-spawning in TryTrigger/Detonate paths).
+	    SpawnBloodBuildExplosionFx(center);
 
     if (chainDamageScale <= 0f) return;
 
@@ -692,6 +702,49 @@ private void TriggerBloodBuildExplosionAttack(Vector3D center, int chainDepth, f
     explosion.Apply();
 }
 
+	private bool TryConsumeBloodBuildExecProc()
+	{
+	    if (User?.World?.BuffManager == null) return true;
+
+	    var limiter = User.World.BuffManager.GetFirstBuff<BloodBuildExecBurstLimiter>(User);
+	    if (limiter == null)
+	    {
+	        limiter = new BloodBuildExecBurstLimiter(WaitSeconds(BloodBuildExecBurstWindowSeconds));
+	        AddBuff(User, limiter);
+	    }
+	    return limiter.TryConsume(BloodBuildExecMaxProcsPerBurstWindow);
+	}
+
+	private class BloodBuildExecBurstLimiter : TimedBuff
+	{
+	    private int _count;
+
+	    public BloodBuildExecBurstLimiter(TickTimer timeout)
+	    {
+	        Timeout = timeout;
+	    }
+
+	    public override bool Apply()
+	    {
+	        _count = 0;
+	        return base.Apply();
+	    }
+
+	    // If the buff is re-added for any reason, keep the longer window but reset the counter.
+	    public override bool Stack(Buff buff)
+	    {
+	        _count = 0;
+	        return base.Stack(buff);
+	    }
+
+	    public bool TryConsume(int max)
+	    {
+	        if (_count >= max) return false;
+	        _count++;
+	        return true;
+	    }
+	}
+
 private class BloodBuildExplosionLockout : Buff
 {
     private readonly TickTimer _timeout;
@@ -701,16 +754,11 @@ private class BloodBuildExplosionLockout : Buff
         _timeout = timeout;
     }
 
-    public override bool Update()
-    {
-        if (_timeout.TimedOut)
-        {
-            Remove();
-            return false;
-        }
-
-        return true;
-    }
+	    public override bool Update()
+	    {
+	        // Return true when the buff should be removed.
+	        return (_timeout != null && _timeout.TimedOut) || Removed;
+	    }
 }
 
 // -----------------------------------------------------------------------------------------

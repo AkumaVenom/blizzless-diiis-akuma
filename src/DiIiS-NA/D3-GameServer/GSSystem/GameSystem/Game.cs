@@ -975,7 +975,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GameSystem
 				return;
 			MonsterLevel = Players.Values.Select(p => p.Level).Max();
 			foreach (var wld in _worlds)
-			foreach (var monster in wld.Value.Monsters)
+			foreach (var monster in wld.Value.EnumerateMonsters())
 				monster.UpdateStats();
 		}
 
@@ -1264,7 +1264,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GameSystem
 		{
 			MonsterLevel = level;
 			foreach (var wld in _worlds)
-			foreach (var monster in wld.Value.Monsters)
+			foreach (var monster in wld.Value.EnumerateMonsters())
 				monster.UpdateStats();
 		}
 
@@ -1296,7 +1296,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GameSystem
 			Logger.Info($"$[italic]$Updated Game #$[underline]${GameId}$[/]$ difficulty to {Difficulty}.$[/]$");
 
 			foreach (var wld in _worlds)
-			foreach (var monster in wld.Value.Monsters)
+			foreach (var monster in wld.Value.EnumerateMonsters())
 				monster.UpdateStats();
 			foreach (var plr in Players.Values)
 				plr.InGameClient.SendMessage(

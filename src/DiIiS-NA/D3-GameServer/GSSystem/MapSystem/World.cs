@@ -244,6 +244,16 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 		{
 			get { return Actors.Values.OfType<Monster>().Select(actor => actor).ToList(); }
 		}
+		/// <summary>
+		/// Enumerates monsters in the world without allocating a new List each call.
+		/// Prefer this over the Monsters property in tight loops (AI, combat, etc.).
+		/// </summary>
+		public IEnumerable<Monster> EnumerateMonsters()
+		{
+			// ConcurrentDictionary enumeration is thread-safe for iteration, and avoids a ToList() allocation.
+			return Actors.Values.OfType<Monster>();
+		}
+
 
 		private PowerManager _powerManager;
 		public static PowerManager _PvPPowerManager = new();

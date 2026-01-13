@@ -643,7 +643,7 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Payloads
 				{
 					if (plr3.PlayerIndex == 0)
 						master = plr3;
-					if (GameModsConfig.Instance.NephalemRift.AutoFinish && Target.World.Monsters.Count(s => !s.Dead) <= GameModsConfig.Instance.NephalemRift.AutoFinishThreshold) Target.World.Game.ActiveNephalemProgress = 651;
+					if (GameModsConfig.Instance.NephalemRift.AutoFinish && Target.World.EnumerateMonsters().Count(s => !s.Dead) <= GameModsConfig.Instance.NephalemRift.AutoFinishThreshold) Target.World.Game.ActiveNephalemProgress = 651;
 					plr3.InGameClient.SendMessage(new SimpleMessage(Opcodes.KillCounterRefresh));
 					plr3.InGameClient.SendMessage(new FloatDataMessage(Opcodes.DungeonFinderProgressMessage)
 					{

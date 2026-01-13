@@ -176,7 +176,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem
 					DPS = s.Attributes[GameAttributes.DPS]
 				}
 			).ToArray();
-			var monstersNearbyStats = players.WhereNearbyOf(World.Monsters.ToArray(), s => s.Visible && s.Alive && s.Attributes[GameAttributes.Hitpoints_Max] * 0.8 > Attributes[GameAttributes.Hitpoints_Cur], 120f, 1f).ToArray();
+			var monstersNearbyStats = players.WhereNearbyOf(World.EnumerateMonsters().ToArray(), s => s.Visible && s.Alive && s.Attributes[GameAttributes.Hitpoints_Max] * 0.8 > Attributes[GameAttributes.Hitpoints_Cur], 120f, 1f).ToArray();
 			var monsterStats = monstersNearbyStats.Select(s =>
 					new
 					{

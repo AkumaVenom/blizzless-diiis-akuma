@@ -223,34 +223,56 @@ namespace DiIiS_NA.GameServer.GSSystem.AISystem.Brains
 
 		private Actor AcquireTarget(World world, Vector3D anchorPos)
 		{
-			var monsters = world.Monsters
-				.Where(m => m != null && m.Visible && !m.Dead && !m.Hidden)
-				.Where(m => Distance2D(m.Position, anchorPos) <= _scanRadius)
-				.OrderBy(m => Distance2D(m.Position, anchorPos))
-				.ToList();
-
-			if (monsters.Count == 0) return null;
-
+			// NOTE: Avoid allocations (world.Monsters creates a new List every call) and LINQ in high-density fights.
 			var claims = TargetClaims.GetOrAdd(world.GlobalID, _ => new ConcurrentDictionary<uint, uint>());
 
-			// First pass: try a deterministic "slot" pick that isn't claimed.
-			var startIndex = _slot % monsters.Count;
-			for (int i = 0; i < monsters.Count; i++)
+			var scanRSqr = _scanRadius * _scanRadius;
+
+			Monster bestUnclaimed = null;
+			float bestUnclaimedScore = float.MaxValue;
+
+			Monster bestAny = null;
+			float bestAnyDist = float.MaxValue;
+
+			foreach (var m in world.EnumerateMonsters())
 			{
-				var idx = (startIndex + i) % monsters.Count;
-				var m = monsters[idx];
-				if (m == null) continue;
-				if (claims.TryGetValue(m.GlobalID, out var claimedBy) && claimedBy != Body.GlobalID)
+				if (m == null || !m.Visible || m.Hidden || m.Dead) continue;
+
+				var dx = m.Position.X - anchorPos.X;
+				var dy = m.Position.Y - anchorPos.Y;
+				var distSqr = dx * dx + dy * dy;
+				if (distSqr > scanRSqr) continue;
+
+				if (distSqr < bestAnyDist)
+				{
+					bestAnyDist = distSqr;
+					bestAny = m;
+				}
+
+				var gid = m.GlobalID;
+
+				// Skip targets already claimed by other bots if possible.
+				if (claims.TryGetValue(gid, out var claimer) && claimer != Body.GlobalID)
 					continue;
-				claims[m.GlobalID] = Body.GlobalID;
-				return m;
+
+				// Add a tiny deterministic bias per slot to spread bots across nearby enemies.
+				uint h = gid * 2654435761u;
+				h ^= (uint)_slot * 374761393u;
+				var bias = (h & 0xFFu) * 0.001f; // [0, 0.255]
+				var score = distSqr + bias;
+
+				if (score < bestUnclaimedScore)
+				{
+					bestUnclaimedScore = score;
+					bestUnclaimed = m;
+				}
 			}
 
-			// Fallback: take the closest even if it's claimed.
-			var fallback = monsters[0];
-			if (fallback != null)
-				claims[fallback.GlobalID] = Body.GlobalID;
-			return fallback;
+			var chosen = (Actor)(bestUnclaimed ?? bestAny);
+			if (chosen != null)
+				claims.AddOrUpdate(chosen.GlobalID, Body.GlobalID, (_, __) => Body.GlobalID);
+
+			return chosen;
 		}
 
 		private static void ReleaseClaim(World world, Actor target)
