@@ -13,6 +13,7 @@ using DiIiS_NA.GameServer.GSSystem.AISystem.Brains;
 using DiIiS_NA.GameServer.GSSystem.MapSystem;
 using DiIiS_NA.GameServer.GSSystem.PlayerSystem;
 using DiIiS_NA.GameServer.MessageSystem;
+using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.ACD;
 
 namespace DiIiS_NA.GameServer.GSSystem.BotSystem
 {
@@ -195,6 +196,7 @@ namespace DiIiS_NA.GameServer.GSSystem.BotSystem
 						bot.Attributes[GameAttributes.Team_Override] = 1;
 						bot.Brain = new BotBrain(bot, anchorPlayer, slot);
 						bot.EnterWorld(pos);
+						ApplyBotNoCollision(bot);
 						ids.Add(bot.GlobalID);
 					}
 
@@ -222,6 +224,7 @@ namespace DiIiS_NA.GameServer.GSSystem.BotSystem
 				bot.Master = anchorPlayer;
 				bot.Attributes[GameAttributes.TeamID] = anchorPlayer.Attributes[GameAttributes.TeamID];
 				bot.Attributes[GameAttributes.Team_Override] = 1;
+				ApplyBotNoCollision(bot);
 
 				// Ensure bot damage stays in sync with the player.
 				bot.Attributes[GameAttributes.Damage_Weapon_Min, 0] = anchorPlayer.Attributes[GameAttributes.Damage_Weapon_Min_Total, 0];
@@ -252,6 +255,19 @@ namespace DiIiS_NA.GameServer.GSSystem.BotSystem
 				anchor.X + (float)Math.Cos(a) * r,
 				anchor.Y + (float)Math.Sin(a) * r,
 				anchor.Z);
+		}
+
+
+		private static void ApplyBotNoCollision(Minion bot)
+		{
+			if (bot == null || bot.World == null) return;
+
+			bot.CollFlags = 0;
+			bot.World.BroadcastIfRevealed(plr => new ACDCollFlagsMessage
+			{
+				ActorID = bot.DynamicID(plr),
+				CollFlags = 0
+			}, bot);
 		}
 
 		private static void EnsureTownBots(World world)

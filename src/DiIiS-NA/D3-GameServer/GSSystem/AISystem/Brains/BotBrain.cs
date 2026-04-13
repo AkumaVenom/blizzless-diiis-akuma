@@ -129,6 +129,8 @@ namespace DiIiS_NA.GameServer.GSSystem.AISystem.Brains
 		private Actor _target;
 		private TickTimer _rethink;
 		private TickTimer _attackCooldown;
+		private Vector3D _lastProgressPosition;
+		private int _lastProgressTick = -1;
 
 		// WorldId -> (TargetGlobalId -> BotGlobalId)
 		private static readonly ConcurrentDictionary<uint, ConcurrentDictionary<uint, uint>> TargetClaims = new();
@@ -140,6 +142,7 @@ namespace DiIiS_NA.GameServer.GSSystem.AISystem.Brains
 			_slot = Math.Max(0, slot);
 			_scanRadius = Math.Max(30f, scanRadius);
 			_leashRadius = Math.Max(_scanRadius + 10f, leashRadius);
+			_lastProgressPosition = body?.Position ?? new Vector3D();
 		}
 
 		public override void Think(int tickCounter)
@@ -151,6 +154,12 @@ namespace DiIiS_NA.GameServer.GSSystem.AISystem.Brains
 			_rethink ??= new SecondsTickTimer(Body.World.Game, 0.25f);
 			if (!_rethink.TimedOut) return;
 			_rethink = null;
+
+			if (!TrackProgress(tickCounter))
+			{
+				ResetAndTeleportNearAnchor(_anchor.Position);
+				return;
+			}
 
 			// If we're too far from the anchor, snap back near them.
 			var anchorPos = _anchor.Position;
@@ -173,7 +182,7 @@ namespace DiIiS_NA.GameServer.GSSystem.AISystem.Brains
 				var idlePos = FormationPoint(anchorPos, _slot, radius: 8f);
 				Body.CheckPointPosition = idlePos;
 				if (Distance2D(Body.Position, idlePos) > 6f)
-					CurrentAction = new MoveToPointAction(Body, idlePos);
+					CurrentAction = new MoveToPointWithPathfindAction(Body, idlePos, 2f);
 				return;
 			}
 
@@ -189,7 +198,7 @@ namespace DiIiS_NA.GameServer.GSSystem.AISystem.Brains
 			{
 				// If we have an active action already moving us, leave it unless it's clearly wrong.
 				if (CurrentAction == null || CurrentAction is PowerAction)
-					CurrentAction = new MoveToPointAction(Body, desired);
+					CurrentAction = new MoveToPointWithPathfindAction(Body, desired, attackRange);
 				return;
 			}
 
@@ -214,11 +223,40 @@ namespace DiIiS_NA.GameServer.GSSystem.AISystem.Brains
 				var p = FormationPoint(anchorPos, _slot, radius: 10f);
 				Body.CheckPointPosition = p;
 				Body.Teleport(p);
+				_lastProgressPosition = p;
+				_lastProgressTick = -1;
 			}
 			catch
 			{
 				// Best-effort: never crash the world tick.
 			}
+		}
+
+
+		private bool TrackProgress(int tickCounter)
+		{
+			if (CurrentAction == null)
+			{
+				_lastProgressPosition = Body.Position;
+				_lastProgressTick = tickCounter;
+				return true;
+			}
+
+			if (Distance2D(Body.Position, _lastProgressPosition) > 1.5f)
+			{
+				_lastProgressPosition = Body.Position;
+				_lastProgressTick = tickCounter;
+				return true;
+			}
+
+			if (_lastProgressTick < 0)
+			{
+				_lastProgressTick = tickCounter;
+				return true;
+			}
+
+			// 120 ticks ~= 2 seconds. If a bot is still on the same spot while it has an action, recover it.
+			return (tickCounter - _lastProgressTick) < 120;
 		}
 
 		private Actor AcquireTarget(World world, Vector3D anchorPos)
