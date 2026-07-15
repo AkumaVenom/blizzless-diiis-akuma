@@ -88,7 +88,7 @@ namespace DiIiS_NA.REST
         void HandleInfoRequest(HttpHeader request)
         {
             SendResponseHtml(HttpCode.OK, "Welcome to BlizzLess.Net" + 
-                                          "\nBuild " + Program.BUILD +
+                                          "\nBuild " + Program.Build +
                                           "\nSupport: 2.7.4");
         }
 

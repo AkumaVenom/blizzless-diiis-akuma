@@ -10,12 +10,15 @@ using DiIiS_NA.GameServer.MessageSystem.Message.Fields;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DiIiS_NA.Utilities;
+using Spectre.Console;
 
 namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
 {
 	public class QuestRegistry
 	{
-		public Game Game { get; private set; }
+		private readonly Logger _logger = LogManager.CreateLogger<QuestRegistry>();
+        public Game Game { get; private set; }
 
 		protected QuestEvent script = null;
 
@@ -74,8 +77,24 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
 
 		}
 
+        /// <summary>
+        /// Advance to the next quest step, bypassing bugged quests if the config option is enabled.
+        /// </summary>
+        /// <param name="preAdvance">Executes before advancing to the next quest</param>
+        /// <param name="postAdvance">Executes after advancing to the next quest</param>
+        protected void AdvanceBugged(Action? preAdvance = null, Action? postAdvance = null)
+        {
+            if (!GameServerConfig.Instance.BypassBuggedQuests) return;
+            var questManager = Game.QuestManager;
+            _logger.Warn($"Bypassing {"bugged".Markup().Bold()} quest ({questManager.GetCurrentQuestName().Markup().Color(Color.Red3)} step {Game.CurrentStep.Markup().Color(Color.Red3)}. " +
+                         $"Going to quest {questManager.GetCurrentQuestName(Game.QuestManager.NextStep, true).Markup().Bold().Color(Color.LightCyan1)} " +
+                         $"step {questManager.NextStep.Markup().Bold().Color(Color.LightCyan1)}...");
+            preAdvance?.Invoke();
+            Advance();
+			postAdvance?.Invoke();
+        }
 
-		protected void SetRiftTimer(float duration, World world, QuestEvent qevent, int idSno = 0)
+        protected void SetRiftTimer(float duration, World world, QuestEvent qevent, int idSno = 0)
 		{
 			Game.QuestManager.LaunchRiftQuestTimer(duration, new Action<int>((q) => { qevent.Execute(world); }), idSno);
 		}
@@ -169,18 +188,58 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
             }
         }
 
-		//opening gates or door(for getting pass)
-		protected bool Open(World world, ActorSno sno)
-		{
-			var doors = world.GetAllDoors(sno);
-			if (!doors.Any()) return false;
-			foreach (var door in doors)
-				door.Open();
+        private bool OpenDoors(World world, ActorSno actorSno)
+        {
+            var doors = world.GetAllDoors(actorSno);
+            if (!doors.Any()) return false;
+            foreach (var door in doors)
+            {
+				door.SetUsable(true);
+				door.SetVisible(true);
+                door.Open();
+            }
+
             return true;
-		}
-		
-		//opening all doors
-		protected bool OpenAll(World world)
+        }
+        private bool BreakGizmos(World world, ActorSno actorSno)
+        {
+            var gizmos = world.GetAllGizmos(actorSno);
+            if (!gizmos.Any()) return false;
+            foreach (var gizmo in gizmos)
+            {
+				gizmo.SetUsable(true);
+				gizmo.SetVisible(true);
+                gizmo.Destroy();
+            }
+
+            return true;
+        }
+
+        private bool OpenPortals(World world, ActorSno actorSno)
+        {
+            var portals = world.GetAllPortals(actorSno);
+            if (!portals.Any()) return false;
+            foreach (var portal in portals)
+            {
+                portal.SetUsable(true);
+                portal.SetVisible(true);
+            }
+            return true;
+        }
+
+		/// <summary>
+		/// Opens door or portal by a SNO Id
+		/// </summary>
+		/// <param name="world">In-game world</param>
+		/// <param name="sno">The SNO of the door or portal</param>
+		/// <returns>True whether a door was opened or a portal was set to usable and visible.</returns>
+        protected bool Open(World world, ActorSno sno)
+        {
+            return OpenDoors(world, sno) || BreakGizmos(world, sno) || OpenPortals(world, sno);
+        }
+
+        //opening all doors
+        protected bool OpenAll(World world)
 		{
 			var doors = world.GetAllDoors();
 			if (!doors.Any()) return false;
@@ -273,13 +332,10 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
 
 		public bool HasFollower(ActorSno sno)
 		{
-			return Game.Players.Values.First().Followers.Any(x => x.Value == sno);
-		}
-
-		public void AddUniqueFollower(World world, ActorSno sno)
-		{
-			if (!HasFollower(sno))
-				AddFollower(world, sno);
+			var player = Game.ConnectedPlayers.FirstOrDefault();
+            if (player == null) return false;
+                
+            return player.Followers?.Any(x => x.Value == sno) ?? false;
 		}
 
 		public void AddFollower(World world, ActorSno sno)
@@ -288,11 +344,23 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
 				Game.Players.Values.First().AddFollower(world.GetActorBySNO(sno));
 		}
 
-		public void DestroyFollower(ActorSno sno)
+        public void AddUniqueFollower(World world, ActorSno sno)
+        {
+            if (!HasFollower(sno))
+                AddFollower(world, sno);
+        }
+
+        public void DestroyFollower(ActorSno sno)
 		{
 			if (Game.Players.Count > 0)
 				Game.Players.Values.First().DestroyFollower(sno);
 		}
+
+        public void ReconstructFollower(World world, ActorSno sno)
+        {
+			DestroyFollower(sno);
+			AddFollower(world, sno);
+        }
 
 		protected void PlayCutscene(Int32 cutsceneId)
 		{
@@ -340,12 +408,14 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
 			return true;
 		}
 
-		public void Advance(int questId)
-		{
-			if (Game.Players.Count > 0)
-				Game.QuestManager.Advance();
-		}
-	}
+        public void Advance()
+        {
+            if (Game.ConnectedPlayers.Any())
+            {
+                Game.QuestManager.Advance();
+            }
+        }
+    }
 
 	public abstract class QuestEvent
 	{
@@ -363,26 +433,24 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
 
 		public static void AddQuestConversation(Actor actor, int conversation)
 		{
-			var NPC = actor as InteractiveNPC;
-			if (NPC != null)
+			if (actor is InteractiveNPC npc)
 			{
-				NPC.Conversations.Clear();
-				NPC.Conversations.Add(new ActorSystem.Interactions.ConversationInteraction(conversation));
-				NPC.Attributes[GameAttributes.Conversation_Icon, 0] = 2;
-				NPC.Attributes.BroadcastChangedIfRevealed();
-				NPC.ForceConversationSNO = conversation;
+				npc.Conversations.Clear();
+				npc.Conversations.Add(new ActorSystem.Interactions.ConversationInteraction(conversation));
+				npc.Attributes[GameAttributes.Conversation_Icon, 0] = 2;
+				npc.Attributes.BroadcastChangedIfRevealed();
+				npc.ForceConversationSNO = conversation;
 			}
 			else if (actor != null)
 			{
-				foreach (var N in actor.World.GetActorsBySNO(actor.SNO))
-					if (N is InteractiveNPC)
+				foreach (var n in actor.World.GetActorsBySNO(actor.SNO))
+					if (n is InteractiveNPC interactiveNpc)
 					{
-						NPC = N as InteractiveNPC;
-						NPC.Conversations.Clear();
-						NPC.Conversations.Add(new ActorSystem.Interactions.ConversationInteraction(conversation));
-						NPC.Attributes[GameAttributes.Conversation_Icon, 0] = 2;
-						NPC.Attributes.BroadcastChangedIfRevealed();
-						NPC.ForceConversationSNO = conversation;
+						interactiveNpc.Conversations.Clear();
+						interactiveNpc.Conversations.Add(new ActorSystem.Interactions.ConversationInteraction(conversation));
+						interactiveNpc.Attributes[GameAttributes.Conversation_Icon, 0] = 2;
+						interactiveNpc.Attributes.BroadcastChangedIfRevealed();
+						interactiveNpc.ForceConversationSNO = conversation;
 					}
 			}
 		}
@@ -391,12 +459,11 @@ namespace DiIiS_NA.GameServer.GSSystem.QuestSystem
 
 		public static void RemoveConversations(Actor actor)
 		{
-			var NPC = actor as InteractiveNPC;
-			if (NPC != null)
+			if (actor is InteractiveNPC npc)
 			{
-				NPC.Conversations.Clear();
-				NPC.Attributes[GameAttributes.Conversation_Icon, 0] = 1;
-				NPC.Attributes.BroadcastChangedIfRevealed();
+				npc.Conversations.Clear();
+				npc.Attributes[GameAttributes.Conversation_Icon, 0] = 1;
+				npc.Attributes.BroadcastChangedIfRevealed();
 			}
 		}
 	}

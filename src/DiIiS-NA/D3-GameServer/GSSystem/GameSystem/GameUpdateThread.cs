@@ -37,7 +37,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GameSystem
 
 		public void Run()
 		{
-			List<Game> inactiveGames = new List<Game>();
+			List<Game> InactiveGames = new List<Game>();
 			int missedTicks = 0;
 
 			Thread.BeginThreadAffinity();
@@ -51,15 +51,15 @@ namespace DiIiS_NA.GameServer.GSSystem.GameSystem
 
 			while (true)
 			{
-				Stopwatch stopwatch = new Stopwatch();
-				stopwatch.Restart();
+				Stopwatch _tickWatch = new Stopwatch();
+				_tickWatch.Restart();
 
 				lock (_lock)
 				{
 					foreach (var game in Games)
 					{
 						if (!game.Working)
-							inactiveGames.Add(game);
+							InactiveGames.Add(game);
 						else
 						{
 							if (!game.UpdateInProgress)
@@ -67,15 +67,11 @@ namespace DiIiS_NA.GameServer.GSSystem.GameSystem
 								game.UpdateInProgress = true;
 								Task.Run(() =>
 								{
-                                    try
-                                    {
-                                        game.Update();
-                                    }
-                                    catch (Exception ex)
-                                    {
-										Logger.ErrorException(ex, "Error in Game.Update()");
-                                    }
-
+									try
+									{
+										game.Update();
+									}
+									catch { }
 									game.MissedTicks = 0;
 									game.UpdateInProgress = false;
 								});
@@ -83,33 +79,25 @@ namespace DiIiS_NA.GameServer.GSSystem.GameSystem
 							else
 							{
 								game.MissedTicks += 6;
-                                if (game.MissedTicks > 60)
-                                {
-                                    Logger.Warn("Game.Update() is running too slow. GameId: {0}", game.GameId);
-                                    game.MissedTicks = 0;
-                                }
 							}
 						}
 					}
 
-                    foreach (var game in inactiveGames)
-                    {
-                        game.Working = false;
-                        Games.Remove(game);
-                    }
+					foreach (var game in InactiveGames)
+						Games.Remove(game);
 
-                    inactiveGames.Clear();
+					InactiveGames.Clear();
 				}
 
-				stopwatch.Stop();
+				_tickWatch.Stop();
 
-				var compensation = (int)(100 - stopwatch.ElapsedMilliseconds); // the compensation value we need to sleep in order to get consistent 100 ms Game.Update().
+				var compensation = (int)(100 - _tickWatch.ElapsedMilliseconds); // the compensation value we need to sleep in order to get consistent 100 ms Game.Update().
 
-				if (stopwatch.ElapsedMilliseconds > 100)
+				if (_tickWatch.ElapsedMilliseconds > 100)
 				{
-					Logger.Trace("Game.Update() took [{0}ms] more than Game.UpdateFrequency [{1}ms].", stopwatch.ElapsedMilliseconds, 100);
-					compensation = (int)(100 - (stopwatch.ElapsedMilliseconds % 100));
-					missedTicks = 6 * (int)(stopwatch.ElapsedMilliseconds / 100);
+					Logger.Trace("Game.Update() took [{0}ms] more than Game.UpdateFrequency [{1}ms].", _tickWatch.ElapsedMilliseconds, 100);
+					compensation = (int)(100 - (_tickWatch.ElapsedMilliseconds % 100));
+					missedTicks = 6 * (int)(_tickWatch.ElapsedMilliseconds / 100);
 					Thread.Sleep(Math.Max(0, compensation)); // sleep until next Update().
 				}
 				else

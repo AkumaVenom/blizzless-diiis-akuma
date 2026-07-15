@@ -6,6 +6,8 @@ namespace DiIiS_NA.Core.Extensions
 {
 	public static class StringExtensions
 	{
+		public static bool Is(this string input)
+			 => input.Trim().Equals("true", StringComparison.InvariantCultureIgnoreCase);
 		public static string ZipCompress(this string value)
 		{
 			byte[] byteArray = new byte[value.Length];
@@ -44,15 +46,15 @@ namespace DiIiS_NA.Core.Extensions
 				byteArray[indexBA++] = (byte)item;
 			}
 
-			System.IO.MemoryStream ms = new(byteArray);
-			System.IO.Compression.GZipStream sr = new(ms,
+			System.IO.MemoryStream ms = new System.IO.MemoryStream(byteArray);
+			System.IO.Compression.GZipStream sr = new System.IO.Compression.GZipStream(ms,
 				System.IO.Compression.CompressionMode.Decompress);
 
 			byteArray = new byte[byteArray.Length];
 
 			int rByte = sr.Read(byteArray, 0, byteArray.Length);
 
-			System.Text.StringBuilder sB = new(rByte);
+			System.Text.StringBuilder sB = new System.Text.StringBuilder(rByte);
 			for (int i = 0; i < rByte; i++)
 			{
 				sB.Append((char)byteArray[i]);

@@ -136,7 +136,9 @@ namespace DiIiS_NA.REST.Extensions
 
         public static void Swap<T>(ref T left, ref T right)
         {
-            (left, right) = (right, left);
+            T temp = left;
+            left = right;
+            right = temp;
         }
 
         #region Strings

@@ -19,12 +19,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public int Cosmetic1
 		{
-			get => DbToon.Cosmetic1;
+			get => DBToon.Cosmetic1;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.Cosmetic1 = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -33,12 +33,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public int Cosmetic2
 		{
-			get => DbToon.Cosmetic2;
+			get => DBToon.Cosmetic2;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.Cosmetic2 = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -47,12 +47,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public int Cosmetic3
 		{
-			get => DbToon.Cosmetic3;
+			get => DBToon.Cosmetic3;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.Cosmetic3 = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -61,12 +61,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public int Cosmetic4
 		{
-			get => DbToon.Cosmetic4;
+			get => DBToon.Cosmetic4;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.Cosmetic4 = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -75,7 +75,7 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		#endregion
 
-		public DBToon DbToon
+		public DBToon DBToon
 		{
 			get;
 			/*
@@ -93,11 +93,11 @@ namespace DiIiS_NA.LoginServer.Toons
 			set;
 		}
 
-		private DBToon CachedDbToon { get; set; }
+		private DBToon CachedDBToon { get; set; }
 
 		public bool IsHardcore { get; set; }
 
-		public DBActiveSkills DbActiveSkills
+		public DBActiveSkills DBActiveSkills
 		{
 			get { return DBSessions.SessionQuerySingle<DBActiveSkills>(s => s.DBToon.Id == PersistentID); }
 			set { }
@@ -108,7 +108,7 @@ namespace DiIiS_NA.LoginServer.Toons
 			get
 			{
 				var val = new IntPresenceField(FieldKeyHelper.Program.D3, FieldKeyHelper.OriginatingClass.Hero, 1, 0,
-					ClassId);
+					ClassID);
 				return val;
 			}
 		}
@@ -152,13 +152,13 @@ namespace DiIiS_NA.LoginServer.Toons
 			FieldKeyHelper.OriginatingClass.Hero, 5, 0, _heroName);
 
 		private D3.Hero.VisualEquipment _visualEquipment = null;
-		public bool VisualEquipmentChanged = true;
+		public bool _visualEquipmentChanged = true;
 
 		public ByteStringPresenceField<D3.Hero.VisualEquipment> HeroVisualEquipmentField
 		{
 			get
 			{
-				if (VisualEquipmentChanged)
+				if (_visualEquipmentChanged)
 				{
 					var visualItems = new[]
 					{
@@ -171,7 +171,7 @@ namespace DiIiS_NA.LoginServer.Toons
 						D3.Hero.VisualItem.CreateBuilder().SetEffectLevel(0).Build(), // Shoulders
 						D3.Hero.VisualItem.CreateBuilder().SetEffectLevel(0).Build(), // Legs
 					};
-					var cosmeticItems = new[]
+					var CosmeticItems = new[]
 					{
 						D3.Hero.VisualCosmeticItem.CreateBuilder().SetGbid(Cosmetic1).Build(), // Wings
 						D3.Hero.VisualCosmeticItem.CreateBuilder().SetGbid(Cosmetic2).Build(), // Flag
@@ -197,8 +197,8 @@ namespace DiIiS_NA.LoginServer.Toons
 					}
 
 					_visualEquipment = D3.Hero.VisualEquipment.CreateBuilder().AddRangeVisualItem(visualItems)
-						.AddRangeCosmeticItem(cosmeticItems).Build();
-					VisualEquipmentChanged = false;
+						.AddRangeCosmeticItem(CosmeticItems).Build();
+					_visualEquipmentChanged = false;
 				}
 
 				return new ByteStringPresenceField<D3.Hero.VisualEquipment>(FieldKeyHelper.Program.D3,
@@ -212,19 +212,19 @@ namespace DiIiS_NA.LoginServer.Toons
 		/// <summary>
 		/// D3 EntityID encoded id.
 		/// </summary>
-		public D3.OnlineService.EntityId D3EntityId { get; private set; }
+		public D3.OnlineService.EntityId D3EntityID { get; private set; }
 
 		/// <summary>
 		/// True if toon has been recently deleted;
 		/// </summary>
 		public bool Deleted
 		{
-			get => DbToon.Deleted;
+			get => DBToon.Deleted;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.Deleted = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -235,12 +235,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public int SeasonCreated
 		{
-			get => DbToon.CreatedSeason;
+			get => DBToon.CreatedSeason;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.CreatedSeason = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -249,12 +249,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public bool StoneOfPortal
 		{
-			get => DbToon.StoneOfPortal;
+			get => DBToon.StoneOfPortal;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.StoneOfPortal = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -263,12 +263,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public bool Dead
 		{
-			get => DbToon.Dead;
+			get => DBToon.Dead;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.Dead = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -280,12 +280,12 @@ namespace DiIiS_NA.LoginServer.Toons
 		/// </summary>
 		public bool Archieved
 		{
-			get => DbToon.Archieved;
+			get => DBToon.Archieved;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.Archieved = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -319,9 +319,9 @@ namespace DiIiS_NA.LoginServer.Toons
 			set
 			{
 				_heroName = value;
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.Name = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -350,9 +350,9 @@ namespace DiIiS_NA.LoginServer.Toons
 			set
 			{
 				GameAccountId = value.PersistentID;
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.DBGameAccount = value.DBGameAccount;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -414,9 +414,9 @@ namespace DiIiS_NA.LoginServer.Toons
 			set
 			{
 				_flags = value;
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.Flags = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -440,7 +440,7 @@ namespace DiIiS_NA.LoginServer.Toons
 			{
 				if (_levelChanged || !LoginServerConfig.Instance.Enabled)
 				{
-					_cachedLevel = DbToon.Level;
+					_cachedLevel = DBToon.Level;
 					_levelChanged = false;
 				}
 
@@ -448,10 +448,10 @@ namespace DiIiS_NA.LoginServer.Toons
 			}
 			private set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
 					_cachedLevel = value;
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.Level = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -459,7 +459,7 @@ namespace DiIiS_NA.LoginServer.Toons
 		}
 
 		private int _cachedParagonLevel = 0;
-		public bool ParagonLevelChanged = true;
+		public bool _paragonLevelChanged = true;
 
 		/// <summary>
 		/// Toon's Paragon level.
@@ -468,9 +468,9 @@ namespace DiIiS_NA.LoginServer.Toons
 		{
 			get
 			{
-				if (!ParagonLevelChanged && LoginServerConfig.Instance.Enabled) return _cachedParagonLevel;
+				if (!_paragonLevelChanged && LoginServerConfig.Instance.Enabled) return _cachedParagonLevel;
 				_cachedParagonLevel = GameAccount.DBGameAccount.ParagonLevel;
-				ParagonLevelChanged = false;
+				_paragonLevelChanged = false;
 
 				return _cachedParagonLevel;
 			}
@@ -494,16 +494,16 @@ namespace DiIiS_NA.LoginServer.Toons
 		/// </summary>
 		public long ExperienceNext
 		{
-			get => (Level >= 70 ? ParagonExperienceNext : DbToon.Experience);
+			get => (Level >= 70 ? ParagonExperienceNext : DBToon.Experience);
 			set
 			{
 				if (Level >= 70)
 					ParagonExperienceNext = value;
 				else
 				{
-					lock (DbToon)
+					lock (DBToon)
 					{
-						var dbToon = DbToon;
+						var dbToon = DBToon;
 						dbToon.Experience = value;
 						DBSessions.SessionUpdate(dbToon);
 					}
@@ -530,12 +530,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public int CurrentAct
 		{
-			get => DbToon.CurrentAct;
+			get => DBToon.CurrentAct;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.CurrentAct = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -544,12 +544,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public int CurrentQuestId
 		{
-			get => DbToon.CurrentQuestId;
+			get => DBToon.CurrentQuestId;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.CurrentQuestId = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -558,12 +558,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public int PvERating
 		{
-			get => DbToon.PvERating;
+			get => DBToon.PvERating;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.PvERating = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -572,12 +572,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public int CurrentQuestStepId
 		{
-			get => DbToon.CurrentQuestStepId;
+			get => DBToon.CurrentQuestStepId;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.CurrentQuestStepId = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -586,12 +586,12 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public int CurrentDifficulty
 		{
-			get => DbToon.CurrentDifficulty;
+			get => DBToon.CurrentDifficulty;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.CurrentDifficulty = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -606,11 +606,11 @@ namespace DiIiS_NA.LoginServer.Toons
 			get => GameAccount.DBGameAccount.TotalKilled;
 			set
 			{
-				var dbGa = GameAccount.DBGameAccount;
-				lock (dbGa)
+				var dbGA = GameAccount.DBGameAccount;
+				lock (dbGA)
 				{
-					dbGa.TotalKilled = value;
-					DBSessions.SessionUpdate(dbGa);
+					dbGA.TotalKilled = value;
+					DBSessions.SessionUpdate(dbGA);
 				}
 			}
 		}
@@ -623,11 +623,11 @@ namespace DiIiS_NA.LoginServer.Toons
 			get => GameAccount.DBGameAccount.ElitesKilled;
 			set
 			{
-				var dbGa = GameAccount.DBGameAccount;
-				lock (dbGa)
+				var dbGA = GameAccount.DBGameAccount;
+				lock (dbGA)
 				{
-					dbGa.ElitesKilled = value;
-					DBSessions.SessionUpdate(dbGa);
+					dbGA.ElitesKilled = value;
+					DBSessions.SessionUpdate(dbGA);
 				}
 			}
 		}
@@ -650,19 +650,19 @@ namespace DiIiS_NA.LoginServer.Toons
 			}
 			set
 			{
-				var dbGa = GameAccount.DBGameAccount;
-				lock (dbGa)
+				var dbGA = GameAccount.DBGameAccount;
+				lock (dbGA)
 				{
 					if (IsHardcore)
 					{
-						dbGa.TotalBountiesHardcore = value;
+						dbGA.TotalBountiesHardcore = value;
 					}
 					else
 					{
-						dbGa.TotalBounties = value;
+						dbGA.TotalBounties = value;
 					}
 
-					DBSessions.SessionUpdate(dbGa);
+					DBSessions.SessionUpdate(dbGA);
 				}
 			}
 		}
@@ -672,10 +672,10 @@ namespace DiIiS_NA.LoginServer.Toons
 		/// </summary>
 		public int SeasonalKills
 		{
-			get => DbToon.Kills;
+			get => DBToon.Kills;
 			set
 			{
-				var dbToon = DbToon;
+				var dbToon = DBToon;
 				lock (dbToon)
 				{
 					dbToon.Kills = value;
@@ -714,12 +714,12 @@ namespace DiIiS_NA.LoginServer.Toons
 		/// </summary>
 		public int CollectedGoldSeasonal
 		{
-			get => DbToon.GoldGained;
+			get => DBToon.GoldGained;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.GoldGained = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -731,12 +731,12 @@ namespace DiIiS_NA.LoginServer.Toons
 		/// </summary>
 		public int TimePlayed
 		{
-			get => DbToon.TimePlayed;
+			get => DBToon.TimePlayed;
 			set
 			{
-				lock (DbToon)
+				lock (DBToon)
 				{
-					var dbToon = DbToon;
+					var dbToon = DBToon;
 					dbToon.TimePlayed = value;
 					DBSessions.SessionUpdate(dbToon);
 				}
@@ -751,7 +751,7 @@ namespace DiIiS_NA.LoginServer.Toons
 		/// <summary>
 		/// Database handler for this toon
 		/// </summary>
-		public GameDBSession DbSession { get; set; }
+		public GameDBSession DBSession { get; set; }
 
 		/// <summary>
 		/// Settings for toon.
@@ -772,14 +772,14 @@ namespace DiIiS_NA.LoginServer.Toons
 		{
 			get
 			{
-				var dbToon = DbToon;
+				var dbToon = DBToon;
 				if (IsHardcore) dbToon.Flags |= ToonFlags.Hardcore;
 				//var isSeason = Convert.ToUInt16(isSeassoned);
 
 				var digest = D3.Hero.Digest.CreateBuilder().SetVersion(905)
-					.SetHeroId(D3EntityId)
+					.SetHeroId(D3EntityID)
 					.SetHeroName(Name)
-					.SetGbidClass((int)ClassId)
+					.SetGbidClass((int)ClassID)
 					.SetLevel(Level)
 					//deprecated //.SetAltLevel(dbToon.ParagonLevel)
 					.SetPlayerFlags((uint)dbToon.Flags) // + isSeason)
@@ -806,7 +806,7 @@ namespace DiIiS_NA.LoginServer.Toons
 				else
 				{
 					var dbQuests = DBSessions.SessionQueryWhere<DBQuestHistory>(dbi => dbi.DBToon.Id == PersistentID);
-#if DEBUG
+//#if DEBUG
 					digest
 						.AddQuestHistory(D3.Hero.QuestHistoryEntry.CreateBuilder().SetDifficultyDeprecated(0)
 							.SetSnoQuest(87700))
@@ -893,23 +893,23 @@ namespace DiIiS_NA.LoginServer.Toons
 						.AddQuestHistory(D3.Hero.QuestHistoryEntry.CreateBuilder().SetDifficultyDeprecated(0)
 							.SetSnoQuest(273408))
 						;
-#else
-										foreach (var inv in dbQuests)
-										{
-											// load quests
-											var quest = D3.Hero.QuestHistoryEntry.CreateBuilder()
-													.SetSnoQuest(inv.QuestId);
-													//deprecated //.SetDifficulty(inv.Difficulty);
-												if (inv.isCompleted != true)
-													quest.SetHighestPlayedQuestStep(inv.QuestStep);
-											digest.AddQuestHistory(quest);
-										}
-					digest
-						.AddQuestHistory(D3.Hero.QuestHistoryEntry.CreateBuilder().SetDifficultyDeprecated(0).SetSnoQuest(80322))
-						.AddQuestHistory(D3.Hero.QuestHistoryEntry.CreateBuilder().SetDifficultyDeprecated(0).SetSnoQuest(93595))
-						.AddQuestHistory(D3.Hero.QuestHistoryEntry.CreateBuilder().SetDifficultyDeprecated(0).SetSnoQuest(112498))
-						.AddQuestHistory(D3.Hero.QuestHistoryEntry.CreateBuilder().SetDifficultyDeprecated(0).SetSnoQuest(251355));
-#endif
+//#else
+//										foreach (var inv in _dbQuests)
+//										{
+//											// load quests
+//											var quest = D3.Hero.QuestHistoryEntry.CreateBuilder()
+//													.SetSnoQuest(inv.QuestId);
+//													//deprecated //.SetDifficulty(inv.Difficulty);
+//												if (inv.isCompleted != true)
+//													quest.SetHighestPlayedQuestStep(inv.QuestStep);
+//											digest.AddQuestHistory(quest);
+//										}
+//					digest
+//						.AddQuestHistory(D3.Hero.QuestHistoryEntry.CreateBuilder().SetDifficultyDeprecated(0).SetSnoQuest(80322))
+//						.AddQuestHistory(D3.Hero.QuestHistoryEntry.CreateBuilder().SetDifficultyDeprecated(0).SetSnoQuest(93595))
+//						.AddQuestHistory(D3.Hero.QuestHistoryEntry.CreateBuilder().SetDifficultyDeprecated(0).SetSnoQuest(112498))
+//						.AddQuestHistory(D3.Hero.QuestHistoryEntry.CreateBuilder().SetDifficultyDeprecated(0).SetSnoQuest(251355));
+//#endif
 				}
 
 				return digest.Build();
@@ -936,7 +936,7 @@ namespace DiIiS_NA.LoginServer.Toons
 							.SetIdHigh(0x3C000002517A293 + invItem.Id))
 						.SetHirelingClass(0)
 						.SetItemSlot(272 + invItem.EquipmentSlot * 16)
-						.SetOwnerEntityId(D3EntityId)
+						.SetOwnerEntityId(D3EntityID)
 						.SetSquareIndex(0)
 						.SetUsedSocketCount(0);
 
@@ -1014,7 +1014,7 @@ namespace DiIiS_NA.LoginServer.Toons
 				}
 
 				//*/
-				var dbToon = DbToon;
+				var dbToon = DBToon;
 				string[] stats = dbToon.Stats.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
 				var profile = D3.Profile.HeroProfile.CreateBuilder()
 					.SetHardcore(IsHardcore)
@@ -1022,7 +1022,7 @@ namespace DiIiS_NA.LoginServer.Toons
 					//deprecated //.SetLife(0)
 					.SetSnoKillLocation(71150)
 					.SetKillerInfo(D3.Profile.KillerInfo.CreateBuilder().SetSnoKiller(6031).SetRarity(4))
-					.SetHeroId(D3EntityId)
+					.SetHeroId(D3EntityID)
 					//deprecated //.SetHighestDifficulty(0)
 					.SetHighestLevel(dbToon.Level)
 					//.SetMonstersKilled(111)
@@ -1045,9 +1045,9 @@ namespace DiIiS_NA.LoginServer.Toons
 					//.SetResistCold(110)
 					//.SetResistPoison(111)
 					.SetEquipment(itemList);
-				if (DbActiveSkills != null)
+				if (DBActiveSkills != null)
 				{
-					var dbActiveSkills = DbActiveSkills;
+					var dbActiveSkills = DBActiveSkills;
 					var skills = new[]
 					{
 						D3.Profile.SkillWithRune.CreateBuilder()
@@ -1104,7 +1104,7 @@ namespace DiIiS_NA.LoginServer.Toons
 			}
 		}
 
-		public int ClassId =>
+		public int ClassID =>
 			Class switch
 			{
 				ToonClass.Barbarian => 0x4FB91EE2,
@@ -1118,7 +1118,7 @@ namespace DiIiS_NA.LoginServer.Toons
 			};
 
 		// Used for Conversations
-		public int VoiceClassId =>
+		public int VoiceClassID =>
 			Class switch
 			{
 				ToonClass.DemonHunter => 0,
@@ -1139,21 +1139,21 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		private readonly Dictionary<int, int> _visualToSlotMapping = new() { { 1, 0 }, { 2, 1 }, { 7, 2 }, { 5, 3 }, { 4, 4 }, { 3, 5 }, { 8, 6 }, { 9, 7 } };
 
-		public static readonly Core.MPQ.FileFormats.GameBalance HeroData =
+		private static readonly Core.MPQ.FileFormats.GameBalance HeroData =
 			(Core.MPQ.FileFormats.GameBalance)MPQStorage.Data.Assets[SNOGroup.GameBalance][19740].Data;
 
 		public Toon(DBToon dbToon, GameDBSession dbSession = null)
 			: base(dbToon.Id)
 		{
-			D3EntityId = D3.OnlineService.EntityId.CreateBuilder().SetIdHigh((ulong)EntityIdHelper.HighIdType.ToonId)
+			D3EntityID = D3.OnlineService.EntityId.CreateBuilder().SetIdHigh((ulong)EntityIdHelper.HighIdType.ToonId)
 				.SetIdLow(PersistentID).Build();
 			_heroName = dbToon.Name;
 			_flags = dbToon.Flags;
 			GameAccountId = dbToon.DBGameAccount.Id;
 			_toonClass = dbToon.Class;
 
-			DbToon = dbToon;
-			this.DbSession = dbSession;
+			DBToon = dbToon;
+			DBSession = dbSession;
 			IsHardcore = dbToon.isHardcore;
 			IsSeasoned = dbToon.isSeasoned;
 			HeroTable = HeroData.Heros.Find(item => item.Name == Class.ToString());
@@ -1190,7 +1190,7 @@ namespace DiIiS_NA.LoginServer.Toons
 				{
 					var questHistory = new DBQuestHistory
 					{
-						DBToon = DbToon,
+						DBToon = DBToon,
 						QuestId = quest,
 						QuestStep = -1,
 						isCompleted = true
@@ -1209,8 +1209,8 @@ namespace DiIiS_NA.LoginServer.Toons
 		public void StateChanged()
 		{
 			_levelChanged = true;
-			ParagonLevelChanged = true;
-			VisualEquipmentChanged = true;
+			_paragonLevelChanged = true;
+			_visualEquipmentChanged = true;
 		}
 
 		#region Notifications
@@ -1242,7 +1242,7 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		#endregion
 
-		public static ToonClass GetClassById(int classId) =>
+		public static ToonClass GetClassByID(int classId) =>
 			classId switch
 			{
 				0x4FB91EE2 => ToonClass.Barbarian,
@@ -1257,7 +1257,7 @@ namespace DiIiS_NA.LoginServer.Toons
 
 		public override string ToString()
 		{
-			return $"{{ Toon: {Name} [lowId: {D3EntityId.IdLow}] }}";
+			return $"{{ Toon: {Name} [lowId: {D3EntityID.IdLow}] }}";
 		}
 
 	}
@@ -1276,6 +1276,24 @@ namespace DiIiS_NA.LoginServer.Toons
 		Necromancer,
 		Unknown
 	}
+
+    public static class ToonClasses
+    {
+        public static string GetToonClassName(this ToonClass toonClass)
+        {
+            return toonClass switch
+            {
+                ToonClass.Barbarian => "Barbarian",
+                ToonClass.Crusader => "Crusader",
+                ToonClass.DemonHunter => "Demon Hunter",
+                ToonClass.Monk => "Monk",
+                ToonClass.WitchDoctor => "Witch Doctor",
+                ToonClass.Wizard => "Wizard",
+                ToonClass.Necromancer => "Necromancer",
+                _ => "Unknown",
+            };
+        }
+    }
 
 	[Flags]
 	public enum ToonFlags : uint

@@ -22,26 +22,43 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 			{
 				foreach (var asset in MPQStorage.Data.Assets[SNOGroup.GameBalance].Values)
 				{
-					GameBalance data = asset.Data as GameBalance;
-					if (data is not { Type: BalanceType.AffixList }) continue;
-					foreach (AffixTable affixDefinition in data.Affixes.Where(affixDefinition => affixDefinition.Hash == AffixGbid))
+                    GameBalance data = asset.Data as GameBalance;
+					if (data != null && data.Type == BalanceType.AffixList)
 					{
-						return affixDefinition;
+						foreach (var affixDefinition in data.Affixes)
+						{
+							if (affixDefinition.Hash == AffixGbid) return affixDefinition;
+						}
 					}
 				}
 				return null;
 			}
 		}
 
-		public int Price => (Definition == null ? 0 : Definition.Cost);
+		public int Price
+		{
+			get
+			{
+				return (Definition == null ? 0 : Definition.Cost);
+			}
+		}
 
-		public int ItemLevel => (Definition == null ? 0 : Definition.AffixLevel);
+		public int ItemLevel
+		{
+			get
+			{
+				return (Definition == null ? 0 : Definition.AffixLevel);
+			}
+		}
 
 		public float Score = 0f;
 
 		public int Rating
 		{
-			get => (int)(Price * (1 + Score));
+			get
+			{
+				return (int)(Price * (1 + Score));
+			}
 			set { }
 		}
 
@@ -52,7 +69,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 
 		public override String ToString()
 		{
-			return AffixGbid.ToString();
+			return String.Format("{0}", AffixGbid);
 		}
 
 		public static Affix Parse(String affixString)

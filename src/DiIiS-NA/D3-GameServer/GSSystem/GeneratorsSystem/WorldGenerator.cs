@@ -6,7 +6,6 @@ using DiIiS_NA.Core.Logging;
 using DiIiS_NA.Core.MPQ;
 using DiIiS_NA.Core.Helpers.Math;
 using DiIiS_NA.Core.MPQ.FileFormats;
-using DiIiS_NA.D3_GameServer;
 using DiIiS_NA.GameServer.Core.Types.TagMap;
 using DiIiS_NA.GameServer.Core.Types.SNO;
 using DiIiS_NA.GameServer.Core.Types.Math;
@@ -166,8 +165,6 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 				var WorldContainer = DBSessions.WorldSession.Query<DRLG_Container>().Where(dbt => dbt.WorldSNO == (int)world.SNO).First();
 				var tiles = DBSessions.WorldSession.Query<DRLG_Tile>().Where(dbt => dbt.Head_Container == (int)WorldContainer.Id).ToList();
 
-			REP:
-				tiles = DBSessions.WorldSession.Query<DRLG_Tile>().Where(dbt => dbt.Head_Container == (int)WorldContainer.Id).ToList();
 				//All Scenes
 				foreach (var Tile in tiles)
 				{
@@ -196,26 +193,36 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 				containers.Add(endChunks);
 				containers.Add(fillerChunks);
 
-				if (world.SNO.IsGenerated())
-					while (true)
-					{
-
-						DRLGGenerateProcess(world, containers, fillerChunks, WorldContainer.RangeofScenes);
-						if (world.worldData.SceneParams.ChunkCount > 15)
-							break;
-
-					}
-				else
+				// Bound the DRLG generation retries so a pathological tile set or a bug in
+				// DRLGGenerateProcess can't hang the server thread forever. For rift worlds
+				// we also require a minimum chunk count (previously 15 was required via a
+				// `while (true)` loop with no exit condition if the generator kept failing).
 				{
-					try
+					bool isRift = world.SNO.IsGenerated();
+					int maxAttempts = isRift ? 32 : 8;
+					int attempts = 0;
+					bool success = false;
+					while (attempts < maxAttempts)
 					{
-						DRLGGenerateProcess(world, containers, fillerChunks, WorldContainer.RangeofScenes);
+						attempts++;
+						try
+						{
+							DRLGGenerateProcess(world, containers, fillerChunks, WorldContainer.RangeofScenes);
+							if (!isRift || world.worldData.SceneParams.ChunkCount > 15)
+							{
+								success = true;
+								break;
+							}
+							Logger.Debug("DRLG rift layout too small on attempt {0}/{1} (chunks={2}), retrying.", attempts, maxAttempts, world.worldData.SceneParams.ChunkCount);
+						}
+						catch (Exception ex)
+						{
+							Logger.WarnException(ex, "DRLGGenerateProcess threw on world {0} (attempt {1}/{2})", world.SNO, attempts, maxAttempts);
+						}
 					}
-					catch
-					{
-						Logger.Info("DRLG generator found an error in the calculation, repeat.");
-						goto REP;
-					}
+					if (!success)
+						Logger.Warn("DRLG generator for world {0} never reached the target chunk count after {1} attempts (current {2}); proceeding with best-effort layout.",
+							world.SNO, attempts, world.worldData.SceneParams.ChunkCount);
 				}
 				Logger.Info("DRLG work - Completed");
 			}
@@ -2296,7 +2303,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 						}
 					}
 
-				if (gizmoLocations.Count > 0 && world.Game.MonsterLevel >= Program.MAX_LEVEL && FastRandom.Instance.Next(100) < 30)
+				if (gizmoLocations.Count > 0 && world.Game.MonsterLevel >= Program.MaxLevel && FastRandom.Instance.Next(100) < 30)
 				{
 					var handleChest = new SNOHandle(96993); //leg chest
 					if (handleChest == null) continue;
@@ -2308,13 +2315,18 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 				if (world.DRLGEmuActive)
 				{
 					int wid = (int)world.SNO;
-					// Load monsters for level area
-					foreach (var scene in levelAreas.First().Value)
+					// Load monsters for the CURRENT level area (not always the first).
+					// Previously this block used levelAreas.First().Value which meant in any DRLG world
+					// with more than one level area, only the first area ever got its monsters populated
+					// and subsequent areas were ghost towns.
+					var scenesForThisArea = levelAreas[la];
+					foreach (var scene in scenesForThisArea)
 					{
 						if (!SpawnGenerator.Spawns.ContainsKey(wid)) break;
 						if (SpawnGenerator.Spawns[wid].LazyLoad)
 						{
-							_lazyLevelAreas.Add(wid, levelAreas.First().Value);
+							if (!_lazyLevelAreas.ContainsKey(wid))
+								_lazyLevelAreas.Add(wid, scenesForThisArea);
 							break;
 						}
 						else
@@ -2325,7 +2337,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 					if (SpawnGenerator.Spawns.ContainsKey(wid) && SpawnGenerator.Spawns[wid].Dangerous.Count > 0 && FastRandom.Instance.NextDouble() < 0.5)
 					{
 						var randomUnique = new SNOHandle(SpawnGenerator.Spawns[wid].Dangerous.PickRandom());
-						var scene = levelAreas.First().Value.PickRandom();
+						var scene = scenesForThisArea.PickRandom();
 						int x = FastRandom.Instance.Next(scene.NavMesh.SquaresCountX);
 						int y = FastRandom.Instance.Next(scene.NavMesh.SquaresCountY);
 						int threshold = 0;
@@ -2368,7 +2380,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 					{
 						var randomGoblin = new SNOHandle(Goblins.PickRandom());
 						if (world.Game.IsHardcore) randomGoblin = new SNOHandle(3852);
-						var scene = levelAreas.First().Value.PickRandom();
+						var scene = scenesForThisArea.PickRandom();
 						int x = FastRandom.Instance.Next(scene.NavMesh.SquaresCountX);
 						int y = FastRandom.Instance.Next(scene.NavMesh.SquaresCountY);
 						int threshold = 0;
@@ -2505,15 +2517,16 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 		public void LoadMonstersLayout(World world, int la, Scene scene)
 		{
 			if (scene.Populated) return;
-			scene.Populated = true;
+			// NOTE: Populated is intentionally NOT set here — if we can't actually spawn (no key,
+			// NoSpawn scene) we want the next LoadMonstersLayout call to still have a chance. A
+			// previous bug marked scenes populated before the ContainsKey check, permanently burning
+			// any scene whose first visit used a level area id not in SpawnGenerator.Spawns.
+			if (scene.SceneData.NoSpawn) { scene.Populated = true; return; }
 			if (!SpawnGenerator.Spawns.ContainsKey(la)) return;
-			if (scene.SceneData.NoSpawn) return;
+			scene.Populated = true;
 
 			List<Affix> packAffixes = new List<Affix>();
-            int akumaDefaultStack = AkumaFeaturesConfig.Instance.HighMobDensityEnabled ? 10 : 6;
-            int akumaChampionStack = AkumaFeaturesConfig.Instance.HighMobDensityEnabled ? 6 : 4;
-            int akumaEliteStack = AkumaFeaturesConfig.Instance.HighMobDensityEnabled ? 7 : 5;
-
+			bool isRift = world.SNO.IsGenerated();
 			int packs_count = world.worldData.DynamicWorld ? 5 : 4;
 			packs_count += (Game.Difficulty / 3);
 
@@ -2528,24 +2541,45 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 			if (Game.Difficulty > 4)
 				packs_count += SpawnGenerator.Spawns[la].AdditionalDensity;
 
-            // Akuma feature: optional higher monster density in generated scenes.
-            if (AkumaFeaturesConfig.Instance.HighMobDensityEnabled)
-            {
-                // Double pack density but keep a safety cap to avoid runaway spawns.
-                packs_count = Math.Min(packs_count * 2, 30);
-            }
-
+			// Rifts need enough packs per scene to reliably reach the 651 progress threshold —
+			// see DeathPayload.cs (NephalemRiftProgressMultiplier * (Quality+1)). Empirically a
+			// floor of 5 packs was still leaving rifts stuck around 60-70% progress because
+			// many rift tiles are narrow corridors where half the packs share positions with
+			// portals/waypoints and get culled. Enforce a much higher floor in rift worlds so
+			// even after culling we reliably have 8+ live packs per scene.
+			if (isRift && packs_count < 10)
+				packs_count = 10;
 
 			var groupId = 0;
 
+			// Bound the retry so a scene that's mostly NoSpawn can't spin this loop forever.
+			// We attempt up to MaxAttempts picks per desired pack; if we can't find a walkable
+			// square we just skip that pack. Scenes with no walkable squares are logged once
+			// and bailed out to avoid pointless work in the caller.
+			const int MaxAttemptsPerPack = 16;
 
 			for (int i = 0; i < packs_count; i++)
 			{
-				int x = FastRandom.Instance.Next(scene.NavMesh.SquaresCountX);
-				int y = FastRandom.Instance.Next(scene.NavMesh.SquaresCountY);
+				int x = -1, y = -1;
+				bool found = false;
+				for (int attempt = 0; attempt < MaxAttemptsPerPack; attempt++)
+				{
+					int tx = FastRandom.Instance.Next(scene.NavMesh.SquaresCountX);
+					int ty = FastRandom.Instance.Next(scene.NavMesh.SquaresCountY);
+					if ((scene.NavMesh.Squares[ty * scene.NavMesh.SquaresCountX + tx].Flags & DiIiS_NA.Core.MPQ.FileFormats.Scene.NavCellFlags.NoSpawn) == 0)
+					{
+						x = tx; y = ty; found = true;
+						break;
+					}
+				}
+				if (!found)
+				{
+					Logger.Trace("LoadMonstersLayout: no walkable square in scene {0} (la={1}) after {2} attempts, skipping pack {3}/{4}",
+						scene.SceneSNO?.Id, la, MaxAttemptsPerPack, i + 1, packs_count);
+					continue;
+				}
 				groupId = FastRandom.Instance.Next();
 
-				if ((scene.NavMesh.Squares[y * scene.NavMesh.SquaresCountX + x].Flags & DiIiS_NA.Core.MPQ.FileFormats.Scene.NavCellFlags.NoSpawn) == 0)
 				{
 					bool isElite = (FastRandom.Instance.NextDouble() < 0.03);
 					if (isElite)
@@ -2560,7 +2594,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 						if (rangedMonsterHandle == null) rangedMonsterHandle = meleeMonsterHandle;
 						else
 							if (meleeMonsterHandle == null) meleeMonsterHandle = rangedMonsterHandle;
-						for (int n = 0; n < akumaEliteStack; n++)
+						for (int n = 0; n < 5; n++)
 						{
 							if (n == 0 || FastRandom.Instance.NextDouble() < 0.85)
 							{
@@ -2603,9 +2637,13 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 							SNOHandle meleeMonsterHandle = (randomMeleeMonsterId == -1 ? null : new SNOHandle(randomMeleeMonsterId));
 							SNOHandle rangedMonsterHandle = (randomRangedMonsterId == -1 ? null : new SNOHandle(randomRangedMonsterId));
 							//int maxMobsInStack = (SpawnGenerator.IsMelee(la, randomMonsterId) ? 6 : (SpawnGenerator.IsDangerous(la, randomMonsterId) ? 1 : 3));
-							for (int n = 0; n < akumaDefaultStack; n++)
+							// Rifts need denser packs — ~5 mobs/pack instead of ~4 — to reach the
+							// 651 progress threshold reliably. Normal worlds keep the old 0.6 slot probability.
+							double slotChance = isRift ? 0.85 : 0.6;
+							int packSize = isRift ? 7 : 6;
+							for (int n = 0; n < packSize; n++)
 							{
-								if (n == 0 || FastRandom.Instance.NextDouble() < 0.6)
+								if (n == 0 || FastRandom.Instance.NextDouble() < slotChance)
 								{
 									LazyLoadActor(
 										(meleeMonsterHandle == null ? rangedMonsterHandle : (rangedMonsterHandle == null ? meleeMonsterHandle : (FastRandom.Instance.NextDouble() < 0.65 ? meleeMonsterHandle : rangedMonsterHandle))),
@@ -2632,7 +2670,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 						{
 							SNOHandle championHandle = new SNOHandle(SpawnGenerator.Spawns[la].Melee.PickRandom());
 							groupId = FastRandom.Instance.Next();
-							for (int n = 0; n < akumaChampionStack; n++)
+							for (int n = 0; n < 4; n++)
 							{
 								if (n == 0 || FastRandom.Instance.NextDouble() < 0.85)
 								{
@@ -2664,7 +2702,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 						#endregion
 					}
 				}
-				else i--;
+				// (walkable-square search is bounded above — no fall-through retry needed)
 			}
 		}
 
@@ -2674,10 +2712,6 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 			try
 			{
 				var actorSno = (ActorSno)actorHandle.Id; // TODO: maybe we can replace SNOHandle
-			// Akuma's Hell on Earth (optional) - demonizes regular monster spawns while protecting quests/bosses.
-			if (AkumaHellOnEarth.TryGetReplacement(world, actorSno, tagMap, out var hellOnEarthSno))
-				actorSno = hellOnEarthSno;
-
 				if (world.QuadTree
 					    .Query<Waypoint>(new Core.Types.Misc.Circle(location.Vector3D.X, location.Vector3D.Y, 60f))
 					    .Count > 0 ||
@@ -2729,10 +2763,6 @@ namespace DiIiS_NA.GameServer.GSSystem.GeneratorsSystem
 		public void LazyLoadActor(SNOHandle actorHandle, PRTransform location, World world, TagMap tagMap, MonsterType monsterType = MonsterType.Default)
 		{
 			var actorSno = (ActorSno)actorHandle.Id; // TODO: maybe we can replace SNOHandle
-			// Akuma's Hell on Earth (optional) - demonizes regular monster spawns while protecting quests/bosses.
-			if (AkumaHellOnEarth.TryGetReplacement(world, actorSno, tagMap, out var hellOnEarthSno))
-				actorSno = hellOnEarthSno;
-
 			if (world.QuadTree.Query<Waypoint>(new DiIiS_NA.GameServer.Core.Types.Misc.Circle(location.Vector3D.X, location.Vector3D.Y, 60f)).Count > 0 ||
 				world.QuadTree.Query<Portal>(new DiIiS_NA.GameServer.Core.Types.Misc.Circle(location.Vector3D.X, location.Vector3D.Y, 40f)).Count > 0)
 			{

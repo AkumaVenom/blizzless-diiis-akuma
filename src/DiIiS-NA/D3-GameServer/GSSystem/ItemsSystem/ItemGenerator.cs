@@ -18,8 +18,8 @@ using DiIiS_NA.GameServer.Core.Types.TagMap;
 using DiIiS_NA.GameServer.MessageSystem;
 using DiIiS_NA.LoginServer.Toons;
 using DiIiS_NA.Core.Helpers.Math;
-using DiIiS_NA.D3_GameServer;
 using DiIiS_NA.GameServer.GSSystem.PlayerSystem;
+using Spectre.Console;
 
 namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 {
@@ -54,35 +54,43 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 
 		static ItemGenerator()
 		{
-			Player.GeneratePLB();
-			Logger.Info("Loading $[underline]$Recipes$[/]$...");
-			Logger.Info("Loading $[underline]$Items$[/]$...");
-			LoadRecipes();
-			LoadItems();
-			Logger.Info("Loading $[underline]$Paragons$[/]$...");
-			LoadParagonBonuses();
-			//LoadAffixes(); //just for checking values
-			//LoadPowers();
-			//LoadQuests();
-			Logger.Info("Loading $[underline]$Tutorials$[/]$...");
-			Tutorials = MPQStorage.Data.Assets[SNOGroup.Tutorial].Keys.OrderBy(i => i).ToList();
-			Logger.Info("Loading $[underline]$Bonuses$[/]$...");
-			LoadItemSetBonuses();
-			LoadGemBonuses();
-			Logger.Info("Loading $[underline]$Handlers$[/]$...");
-			LoadHandlers();
-			Logger.Info("Loading $[underline]$Lore$[/]$...");
-			LoadLore();
-			Logger.Info("Loading $[underline]$Bounties$[/]$...");
-			LoadBounties();
-			//LoadConversations();
-			//if (Net.GS.Config.Instance.Enabled)
+			AnsiConsole.Status()
+				
+				.Start("Loading...", ctx =>
+				{
+					ctx.Spinner(Spinner.Known.Dots10);
+					Player.GeneratePLB();
+					ctx.Status("[purple]Loading[/] recipes...");
+                    LoadRecipes();
+					ctx.Status("[purple]Loading[/] items...");
+					LoadItems();
+                    ctx.Status("[purple]Loading[/] paragon's bonuses...");
+                    LoadParagonBonuses();
+                    //LoadAffixes(); //just for checking values
+                    //LoadPowers();
+                    //LoadQuests();
 
-			Logger.Info("Loading $[underline]$Worlds$[/]$...");
-			Scene.PreCacheMarkers();
+                    ctx.Status("[purple]Loading[/] tutorials...");
+                    Tutorials = MPQStorage.Data.Assets[SNOGroup.Tutorial].Keys.OrderBy(i => i).ToList();
 
-			SetAllowedTypes();
-			System.Threading.Thread.CurrentThread.Name = "ItemGenerator";
+                    ctx.Status("[purple]Loading[/] bonuses/gem bonuses...");
+                    LoadItemSetBonuses();
+					LoadGemBonuses();
+                    ctx.Status("[purple]Loading[/] handlers...");
+                    LoadHandlers();
+                    ctx.Status("[purple]Loading[/] lores...");
+                    LoadLore();
+                    ctx.Status("[purple]Loading[/] bounties...");
+                    LoadBounties();
+                    //LoadConversations();
+                    //if (Net.GS.Config.Instance.Enabled)
+
+                    ctx.Status("[purple]Loading[/] worlds...");
+                    Scene.PreCacheMarkers();
+
+					SetAllowedTypes();
+					System.Threading.Thread.CurrentThread.Name = "ItemGenerator";
+				});
 		}
 
 		#region loading generator
@@ -163,7 +171,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 			//Logger.Info("LoadItems()");
 			foreach (var asset in MPQStorage.Data.Assets[SNOGroup.GameBalance].Values)
 			{
-				GameBalance data = asset.Data as GameBalance;
+                GameBalance data = asset.Data as GameBalance;
 				if (data != null && data.Type == BalanceType.Items)
 				{
 					foreach (var itemDefinition in data.Item)
@@ -353,7 +361,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 			//Logger.Info("LoadRecipes()");
 			foreach (var asset in MPQStorage.Data.Assets[SNOGroup.GameBalance].Values)
 			{
-				GameBalance data = asset.Data as GameBalance;
+                GameBalance data = asset.Data as GameBalance;
 				if (data != null && data.Type == BalanceType.Recipes)
 				{
 					foreach (var recipeDefinition in data.Recipes)
@@ -393,7 +401,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 		{
 			foreach (var asset in MPQStorage.Data.Assets[SNOGroup.GameBalance].Values)
 			{
-				GameBalance data = asset.Data as GameBalance;
+                GameBalance data = asset.Data as GameBalance;
 				if (data != null && data.Type == BalanceType.SocketedEffects)
 				{
 					foreach (var gemBonusDefinition in data.SocketedEffects)
@@ -409,7 +417,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 		{
 			foreach (var asset in MPQStorage.Data.Assets[SNOGroup.GameBalance].Values)
 			{
-				GameBalance data = asset.Data as GameBalance;
+                GameBalance data = asset.Data as GameBalance;
 				if (data != null && data.Type == BalanceType.ParagonBonuses)
 				{
 					foreach (var paragonBonusDefinition in data.ParagonBonusesTables)
@@ -424,7 +432,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 		{
 			foreach (var asset in MPQStorage.Data.Assets[SNOGroup.GameBalance].Values)
 			{
-				GameBalance data = asset.Data as GameBalance;
+                GameBalance data = asset.Data as GameBalance;
 				if (data != null && data.Type == BalanceType.SetItemBonuses)
 				{
 					foreach (var itemSetBonusDefinition in data.SetItemBonus)
@@ -620,7 +628,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 		{
 			foreach (var asset in MPQStorage.Data.Assets[SNOGroup.GameBalance].Values)
 			{
-				GameBalance data = asset.Data as GameBalance;
+                GameBalance data = asset.Data as GameBalance;
 				/*if (data != null && data.Type == BalanceType.AffixList)
 				{
 					foreach (var affixDefinition in data.Affixes)
@@ -1359,8 +1367,8 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 		private static void RandomSetUnidentified(Item item) => item.Unidentified = 
 			FastRandom.Instance.Chance(item.Name.Contains("unique", StringComparison.InvariantCultureIgnoreCase) 
 			|| item.ItemDefinition.Quality is ItemTable.ItemQuality.Legendary or ItemTable.ItemQuality.Special or ItemTable.ItemQuality.Set 
-			? GameModsConfig.Instance.Items.UnidentifiedDropChances.HighQuality 
-			: GameModsConfig.Instance.Items.UnidentifiedDropChances.NormalQuality);
+			? GameServerConfig.Instance.ChanceHighQualityUnidentified 
+			: GameServerConfig.Instance.ChanceNormalUnidentified);
 
 		// Allows cooking a custom item.
 		public static Item Cook(Player player, string name)

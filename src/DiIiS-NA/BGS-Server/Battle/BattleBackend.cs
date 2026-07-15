@@ -1,12 +1,15 @@
-﻿using DiIiS_NA.Core.Logging;
+﻿using DiIiS_NA.Core.Extensions;
+using DiIiS_NA.Core.Logging;
 using DiIiS_NA.Core.Storage;
 using DiIiS_NA.Core.Storage.AccountDataBase.Entities;
 using DiIiS_NA.GameServer.AchievementSystem;
 using DiIiS_NA.GameServer.GSSystem.ItemsSystem;
 using DiIiS_NA.LoginServer.AccountsSystem;
 using DiIiS_NA.LoginServer.GamesSystem;
+using Spectre.Console;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using WatsonTcp;
@@ -27,12 +30,23 @@ namespace DiIiS_NA.LoginServer.Battle
 
 		public readonly Dictionary<string, ServerDescriptor> GameServers = new();
 
-		private readonly Dictionary<string, ServerDescriptor> _pvPGameServers = new();
+		private readonly Dictionary<string, ServerDescriptor> _pvpGameServers = new();
 
 		public BattleBackend(string battleHost, int port)
 		{
 			GameServerSocket = new WatsonTcpServer(battleHost, port, ReceiverClientConnected, ReceiverClientDisconnected, ReceiverMessageReceived, false);
-			System.Threading.Thread.Sleep(3000);
+			AnsiConsole.Status()
+				.Spinner(Spinner.Known.Dots)
+				.SpinnerStyle(Style.Parse("green"))
+				.Start("Starting BattleBackend server (3)...", ctx =>
+                {
+					ctx.Status("Initializing BattleBackend server (3)...");
+                    System.Threading.Thread.Sleep(1000);
+                    ctx.Status("Initializing BattleBackend server (2)...");
+                    System.Threading.Thread.Sleep(1000);
+                    ctx.Status("Initializing BattleBackend server (1)...");
+                    System.Threading.Thread.Sleep(1000);
+                });
 		}
 
 		private bool ReceiverClientConnected(string ipPort)
@@ -45,11 +59,11 @@ namespace DiIiS_NA.LoginServer.Battle
 		{
 			Logger.Warn("Blizzless client disconnected $[white]${0}$[/]$!", ipPort);
 			if (GameServers.ContainsKey(ipPort)) GameServers.Remove(ipPort);
-			if (_pvPGameServers.ContainsKey(ipPort)) _pvPGameServers.Remove(ipPort);
+			if (_pvpGameServers.ContainsKey(ipPort)) _pvpGameServers.Remove(ipPort);
 
 			if (GameServers.Count == 0)
 				Logger.Warn("GameServers list is empty! Unable to use PvE game activities atm.");
-			if (_pvPGameServers.Count == 0)
+			if (_pvpGameServers.Count == 0)
 				Logger.Warn("PvPGameServers list is empty! Unable to use PvP game activities atm.");
 			return true;
 		}
@@ -73,19 +87,17 @@ namespace DiIiS_NA.LoginServer.Battle
 			switch (message[0])
 			{
 				case "rngsr":
-					Logger.Info("test");
 					if (GameServers.ContainsKey(ipPort)) GameServers.Remove(ipPort);
 					string rgsIp = args[0];
 					int rgsPort = int.Parse(args[1].Trim());
-					Logger.Info("Range IP {0}:{1}", rgsIp, rgsPort);
 					GameServers.Add(ipPort, new ServerDescriptor { GameIp = rgsIp, GamePort = rgsPort });
-					Logger.Info("Game server was registered for Blizzless {0}:{1}.", rgsIp, rgsPort);
+					Logger.Info("Game server was [underline]registered[/] for Blizzless {0}:{1}.", rgsIp, rgsPort);
 					break;
 				case "rnpvpgsr":
-					if (_pvPGameServers.ContainsKey(ipPort)) _pvPGameServers.Remove(ipPort);
+					if (_pvpGameServers.ContainsKey(ipPort)) _pvpGameServers.Remove(ipPort);
 					string rpgsIp = args[0];
 					int rpgsPort = int.Parse(args[1].Trim());
-					_pvPGameServers.Add(ipPort, new ServerDescriptor { GameIp = rpgsIp, GamePort = rpgsPort });
+					_pvpGameServers.Add(ipPort, new ServerDescriptor { GameIp = rpgsIp, GamePort = rpgsPort });
 					Logger.Info("PvP GameServer at {0}:{1} successfully signed and ready to work.", rpgsIp, rpgsPort);
 					break;
 				case "grachi":
@@ -150,7 +162,7 @@ namespace DiIiS_NA.LoginServer.Battle
 					ulong ckmcAccId = ulong.Parse(args[0].Trim());
 					int ckmcActorId = int.Parse(args[1].Trim());
 					int ckmcType = int.Parse(args[2].Trim());
-					bool ckmcIsHardcore = (args[3].Trim() == "True" ? true : false);
+					bool ckmcIsHardcore = (args[3].Is());
 					System.Threading.Tasks.Task.Delay(1).ContinueWith((a) => {
 						foreach (var ckmcInvokerClient in PlayerManager.OnlinePlayers.Where(c => c.Account.GameAccount.PersistentID == ckmcAccId))
 							AchievementManager.CheckKillMonsterCriteria(ckmcInvokerClient, ckmcActorId, ckmcType, ckmcIsHardcore);
@@ -200,33 +212,40 @@ namespace DiIiS_NA.LoginServer.Battle
 					ulong uiiAccId = ulong.Parse(args[0].Trim());
 					ulong uiiItemId = ulong.Parse(args[1].Trim());
 					System.Threading.Tasks.Task.Delay(1).ContinueWith((a) => {
-						var plrClient = PlayerManager.OnlinePlayers.FirstOrDefault(c => c.Account.GameAccount.PersistentID == uiiAccId);
-						if (plrClient != null && plrClient.Account.GameAccount.Clan != null)
+						try
 						{
-							var dbItem = DBSessions.SessionGet<DBInventory>(uiiItemId);
-							if (dbItem != null)
+							var plrClient = PlayerManager.OnlinePlayers.FirstOrDefault(c => c.Account.GameAccount.PersistentID == uiiAccId);
+							if (plrClient != null && plrClient.Account.GameAccount.Clan != null)
 							{
-								var generator = D3.Items.Generator.CreateBuilder()
-									.SetGbHandle(D3.GameBalance.Handle.CreateBuilder().SetGbid(dbItem.GbId).SetGameBalanceType(2))
-									.SetStackSize(1)
-									.SetDyeType((uint)dbItem.DyeType)
-									.SetItemQualityLevel(dbItem.Quality)
-									.SetFlags((uint)((dbItem.Binding > 0) ? 0 : ((dbItem.Version == 1) ? 2147483647 : 10633))) //0x1 - explored
-									.SetSeed((uint)ItemGenerator.GetSeed(dbItem.Attributes))
-									.SetDurability(509);
-
-								List<string> affixes = dbItem.Affixes.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-								foreach (string affix in affixes)
+								var dbItem = DBSessions.SessionGet<DBInventory>(uiiItemId);
+								if (dbItem != null)
 								{
-									int result = 0;
-									Int32.TryParse(affix, out result);
-									generator.AddBaseAffixes(result);
-								}
+									var generator = D3.Items.Generator.CreateBuilder()
+										.SetGbHandle(D3.GameBalance.Handle.CreateBuilder().SetGbid(dbItem.GbId).SetGameBalanceType(2))
+										.SetStackSize(1)
+										.SetDyeType((uint)dbItem.DyeType)
+										.SetItemQualityLevel(dbItem.Quality)
+										.SetFlags((uint)((dbItem.Binding > 0) ? 0 : ((dbItem.Version == 1) ? 2147483647 : 10633))) //0x1 - explored
+										.SetSeed((uint)ItemGenerator.GetSeed(dbItem.Attributes))
+										.SetDurability(509);
 
-								plrClient.Account.GameAccount.Clan.AddNews(plrClient.Account.GameAccount, 0, generator.Build().ToByteArray());
+									List<string> affixes = dbItem.Affixes.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+									foreach (string affix in affixes)
+									{
+										int result = 0;
+										Int32.TryParse(affix, out result);
+										generator.AddBaseAffixes(result);
+									}
+
+									plrClient.Account.GameAccount.Clan.AddNews(plrClient.Account.GameAccount, 0, generator.Build().ToByteArray());
+								}
 							}
 						}
-					});
+						catch (Exception ex)
+						{
+							Logger.ErrorException(ex, "Error while processing UniqueItemIdentified message: " + ex.Message);
+                        }
+                    });
 					break;
 				case "uc": //UpdateClient
 					ulong ucAccId = ulong.Parse(args[0].Trim());
@@ -244,7 +263,10 @@ namespace DiIiS_NA.LoginServer.Battle
 								ucInvokerClient.Account.GameAccount.NotifyUpdate();
 							}
 						}
-						catch { }
+						catch (Exception ex)
+						{
+							Logger.ErrorException(ex, "Error while processing UpdateClient message: " + ex.Message);
+                        }
 					});
 					break;
 				case "gpj": //PlayerJoined
@@ -254,8 +276,12 @@ namespace DiIiS_NA.LoginServer.Battle
 						{
 							GameFactoryManager.FindGameByDynamicId((ulong)gpjGameId).PlayersCount++;
 						}
-						catch { }
-					});
+
+                        catch (Exception ex)
+                        {
+                            Logger.ErrorException(ex, "Error while processing PlayerJoined message: " + ex.Message);
+                        }
+                    });
 					break;
 				case "gpl": //PlayerLeft
 					int gplGameId = int.Parse(args[0].Trim());
@@ -266,8 +292,11 @@ namespace DiIiS_NA.LoginServer.Battle
 								GameFactoryManager.FindGameByDynamicId((ulong)gplGameId).PlayersCount--;
 							
 						}
-						catch { }
-					});
+                        catch (Exception ex)
+                        {
+                            Logger.ErrorException(ex, "Error while processing PlayerLeft message: " + ex.Message);
+                        }
+                    });
 					break;
 				case "gsp": //SetGamePublic
 					int gspGameId = int.Parse(args[0].Trim());
@@ -276,8 +305,11 @@ namespace DiIiS_NA.LoginServer.Battle
 						{
 							GameFactoryManager.FindGameByDynamicId((ulong)gspGameId).Public = true;
 						}
-						catch { }
-					});
+                        catch (Exception ex)
+                        {
+                            Logger.ErrorException(ex, "Error while processing SetGamePublic message: " + ex.Message);
+                        }
+                    });
 					break;
 				case "tsc": //ToonStateChanged
 					int tscToonId = int.Parse(args[0].Trim());
@@ -286,30 +318,53 @@ namespace DiIiS_NA.LoginServer.Battle
 						{
 							Toons.ToonManager.GetToonByLowId((ulong)tscToonId).StateChanged();
 						}
-						catch { }
-					});
+						catch (Exception ex)
+						{
+							Logger.ErrorException(ex, "Error while processing ToonStateChanged message: " + ex.Message);
+						}
+                    });
 					break;
 				case "pvpsp":   //PvPSaveProgress
-					ulong pvpspGAccId = ulong.Parse(args[0].Trim());
-					int pvpspKills = int.Parse(args[1].Trim());
-					int pvpspWins = int.Parse(args[2].Trim());
-					int pvpspGold = int.Parse(args[3].Trim());
-					System.Threading.Tasks.Task.Delay(1).ContinueWith((a) => {
-						var gAcc = GameAccountManager.GetAccountByPersistentID(pvpspGAccId);
+					try
+					{
 
-						lock (gAcc.DBGameAccount)
+						ulong pvpspGAccId = ulong.Parse(args[0].Trim());
+						int pvpspKills = int.Parse(args[1].Trim());
+						int pvpspWins = int.Parse(args[2].Trim());
+						int pvpspGold = int.Parse(args[3].Trim());
+						System.Threading.Tasks.Task.Delay(1).ContinueWith((a) =>
 						{
-							var dbGAcc = gAcc.DBGameAccount;
-							dbGAcc.PvPTotalKilled += (ulong)pvpspKills;
-							dbGAcc.PvPTotalWins += (ulong)pvpspWins;
-							dbGAcc.PvPTotalGold += (ulong)pvpspGold;
-							DBSessions.SessionUpdate(dbGAcc);
-						}
-					});
-					break;
+							try
+							{
+								var gAcc = GameAccountManager.GetAccountByPersistentID(pvpspGAccId);
+
+								lock (gAcc.DBGameAccount)
+								{
+									var dbGAcc = gAcc.DBGameAccount;
+									dbGAcc.PvPTotalKilled += (ulong)pvpspKills;
+									dbGAcc.PvPTotalWins += (ulong)pvpspWins;
+									dbGAcc.PvPTotalGold += (ulong)pvpspGold;
+									DBSessions.SessionUpdate(dbGAcc);
+								}
+							}
+							catch (Exception ex)
+							{
+								Logger.ErrorException(ex, "Error while updating PvP progress in database: " + ex.Message);
+                            }
+                        });
+					}
+					catch (Exception ex)
+					{
+						Logger.ErrorException(ex, "Error while processing PvPSaveProgress message: " + ex.Message);
+                    }
+                    break;
 				default:
-					Logger.Warn("Unknown message type: $[white]${0}|{1}$[/]$", message[0], message[1]);
-					break;
+					if (message.Length >= 2)
+						Logger.Warn("Unknown message type: $[white]${0}|{1}$[/]$", message[0], message[1]);
+					else if (message.Length == 1)
+						Logger.Warn("Unknown message type: $[white]${0}$[/]$", message[0]);
+					else Logger.Error("Received empty message or message with invalid format from $[grey69]${0}$[/]$!", ipPort);
+                    break;
 			}
 			return true;
 		}

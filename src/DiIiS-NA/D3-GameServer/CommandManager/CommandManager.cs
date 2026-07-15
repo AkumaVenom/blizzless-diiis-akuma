@@ -6,6 +6,10 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using DiIiS_NA.Utilities;
+using Discord;
+using Spectre.Console;
+using Color = Spectre.Console.Color;
 
 namespace DiIiS_NA.GameServer.CommandManager
 {
@@ -13,32 +17,48 @@ namespace DiIiS_NA.GameServer.CommandManager
 	{
 		private static readonly Logger Logger = LogManager.CreateLogger(nameof(CommandManager));
 		private static readonly Dictionary<CommandGroupAttribute, CommandGroup> CommandGroups = new();
+        private static readonly char _prefix;
+		static CommandManager()
+        {
+            _prefix = CommandsConfig.Instance.CommandPrefix.ToCharArray()[0];
+            RegisterCommandGroups();
+        }
 
-		static CommandManager() => RegisterCommandGroups();
-
-		private static void RegisterCommandGroups()
+        private static void RegisterCommandGroups()
 		{
 			foreach (var type in Assembly.GetExecutingAssembly().GetTypes())
 			{
 				if (!type.IsSubclassOf(typeof(CommandGroup))) continue;
 				var attributes = (CommandGroupAttribute[])type.GetCustomAttributes(typeof(CommandGroupAttribute), true);
+				var obsoleteAttributes = (ObsoleteAttribute[])type.GetCustomAttributes(typeof(ObsoleteAttribute), true);
 				if (attributes.Length == 0) continue;
-				var groupAttribute = attributes[0];
-				if (groupAttribute.Name == null) continue;
+				
+				var groupAttribute = attributes.First(s=>s.GetType() == typeof(CommandGroupAttribute));
+                var obsoleteAttribute = obsoleteAttributes.FirstOrDefault();
+                if (obsoleteAttribute is { } obsolete)
+                    continue;
+
+                if (groupAttribute.Name == null) continue;
 				if (groupAttribute.Name.Contains(" "))
 				{
-					Logger.Warn($"Command group name '{groupAttribute.Name}' contains spaces (which is $[red]$not$[/]$ allowed). $[red]$Command group will be ignored.$[/]$");
+					Logger.Warn($"Command group name '{groupAttribute.Name}' contains spaces (which is {"not allowed".Markup().Bold().Color(Color.Red)})." + 
+                                "Command group will be ignored.".Markup().Color(Color.Red3_1));
 					continue;
 				}
 
-				if (CommandsConfig.Instance.DisabledGroupsData.Contains(groupAttribute.Name))
+				if (CommandsConfig.Instance.DisabledGroupsData.Contains(groupAttribute.Name) || groupAttribute.Disabled)
 				{
-					Logger.Warn($"Command group name '{groupAttribute.Name}' is disabled.");
+					Logger.Warn($"Command group name '{groupAttribute.Name.Markup().Color(Color.Red3_1)}' is disabled.");
 					continue;
 				}
 				if (CommandGroups.ContainsKey(groupAttribute))
-					Logger.Warn($"There exists an already registered command group named '{groupAttribute.Name}'.");
+					Logger.Warn($"There exists an already registered command group named '{groupAttribute.Name.Markup().Color(Color.Red)}'.");
 
+                if (groupAttribute.Disabled)
+                {
+                    Logger.Warn($"The command {groupAttribute.Name.Markup().Color(Color.Red)} is " + "disabled".Markup().Bold().Underline().Color(Spectre.Console.Color.Red));
+                    continue;
+                }
 				var commandGroup = (CommandGroup)Activator.CreateInstance(type);
 				if (commandGroup != null)
 				{
@@ -78,13 +98,14 @@ namespace DiIiS_NA.GameServer.CommandManager
 				break;
 			}
 
-			if (found == false)
+			if (!found)
 			{
 				Logger.Warn("Unknown command.");
 				return;
 			}
 
-			Logger.Success(output != string.Empty ? "\n-----------------------------------------------------\n" + output + "\n-----------------------------------------------------\n" : "Command executed successfully.");
+            var separator = new string('-', 53);
+			Logger.Success(output != string.Empty ? $"\n{separator}\n" + output + $"\n{separator}\n" : "Command executed successfully.");
 		}
 
 
@@ -119,7 +140,7 @@ namespace DiIiS_NA.GameServer.CommandManager
 				output = $"Unknown command.";
 #endif
 				
-			if (string.IsNullOrEmpty(output))
+			if (output == string.Empty)
 				return true;
 
 			if (output.Contains("\n"))
@@ -142,7 +163,7 @@ namespace DiIiS_NA.GameServer.CommandManager
 			if (line == string.Empty)
 				return false;
 
-			if (line[0] != CommandsConfig.Instance.CommandPrefix) // if line does not start with command-prefix
+			if (line[0] != _prefix) // if line does not start with command-prefix
 				return false;
 
 			line = line[1..]; // advance to actual command.
@@ -156,25 +177,35 @@ namespace DiIiS_NA.GameServer.CommandManager
 		[CommandGroup("commands", "Lists available commands for your user-level.")]
 		public class CommandsCommandGroup : CommandGroup
 		{
-			public override string Fallback(string[] parameters = null, BattleClient invokerClient = null)
-			{
-				var output = "Available commands:\n";
-				output = 
-					invokerClient != null 
-						? CommandGroups.Where(pair => pair.Key.MinUserLevel > invokerClient?.Account.UserLevel)
-							.Aggregate(output, (current, pair) => current + ($"{CommandsConfig.Instance.CommandPrefix}{pair.Key.Name}: {pair.Key.Help}\n\n")) 
-						: CommandGroups
-							.Where(s=>!s.Key.InGameOnly)
-							.Aggregate(output, (current, pair) => current + (($"$[underline green]${CommandsConfig.Instance.CommandPrefix}{pair.Key.Name}$[/]$: $[white]${pair.Key.Help}$[/]$\n")));
+            public override string Fallback(string[] parameters = null, BattleClient invokerClient = null)
+            {
+                var output = "Available commands:\n";
 
-				return output + $"Type '{CommandsConfig.Instance.CommandPrefix}help <command>' to get help about a specific command.";
-			}
-		}
+                if (invokerClient?.InGameClient != null)
+                {
+                    var accessibleCommands = CommandGroups
+                        .Where(pair => pair.Key.MinUserLevel <= invokerClient.Account.UserLevel)
+                        .Select(pair => $"{pair.Key.Name.WithCommandPrefix()}: {pair.Key.Help}\n\n");
+
+                    output = accessibleCommands.Aggregate(output, (current, command) => current + command);
+                }
+                else
+                {
+                    var consoleCommands = CommandGroups
+                        .Where(s => !s.Key.InGameOnly)
+                        .Select(pair => $"{(pair.Key.Name.WithCommandPrefix()).Markup().Bold().Color(Color.Yellow3_1)}: {pair.Key.Help.Markup().Color(Color.Purple4_1)}\n");
+
+                    output = consoleCommands.Aggregate(output, (current, command) => current + command);
+                }
+
+                return output + $"Type '{"help".WithCommandPrefix()} <command>' to get help about a specific command.";
+            }
+        }
 
 		[CommandGroup("help", "usage: help <command>\nType 'commands' to get a list of available commands.")]
 		public class HelpCommandGroup : CommandGroup
 		{
-			public override string Fallback(string[] parameters = null, BattleClient invokerClient = null) => $"usage: {CommandsConfig.Instance.CommandPrefix}help <command>\nType 'commands' to get a list of available commands.";
+			public override string Fallback(string[] parameters = null, BattleClient invokerClient = null) => $"usage: {"help".WithCommandPrefix()} <command>\nType 'commands' to get a list of available commands.";
 
 			public override string Handle(string parameters, BattleClient invokerClient = null)
 			{
@@ -197,10 +228,18 @@ namespace DiIiS_NA.GameServer.CommandManager
 				}
 
 				if (!found)
-					output = $"Unknown command: {group.SafeAnsi()} {command.SafeAnsi()}";
+					output = $"Unknown command: {group.EscapeMarkup()} {command.EscapeMarkup()}";
 
 				return output;
 			}
 		}
 	}
+
+	public static class WithCommandPrefixExtension
+	{
+		public static string WithCommandPrefix(this string command)
+		{
+			return CommandsConfig.Instance.CommandPrefix + command;
+		}
+    }
 }

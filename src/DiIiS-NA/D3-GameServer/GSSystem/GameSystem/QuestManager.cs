@@ -21,6 +21,7 @@ using DiIiS_NA.GameServer.MessageSystem;
 using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.Map;
 using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.Quest;
 using DiIiS_NA.GameServer.MessageSystem.Message.Fields;
+using DiIiS_NA.Utilities;
 using Spectre.Console;
 using Monster = DiIiS_NA.GameServer.GSSystem.ActorSystem.Monster;
 
@@ -30,6 +31,11 @@ namespace DiIiS_NA.D3_GameServer.GSSystem.GameSystem
 	{
 		private static readonly Logger Logger = new(nameof(QuestManager));
 
+		/// <summary>
+		/// Accessor for quests
+		/// </summary>
+		/// <param name="snoQuest">snoId of the quest to retrieve</param>
+		/// <returns></returns>
 		public readonly Dictionary<int, QuestRegistry.Quest> Quests = new();
 
 		public readonly Dictionary<int, QuestRegistry.Quest> SideQuests = new();
@@ -40,7 +46,39 @@ namespace DiIiS_NA.D3_GameServer.GSSystem.GameSystem
 
 		public int CurrentAct => Game.CurrentAct;
 
-		public delegate void QuestProgressDelegate();
+        public string GetCurrentAct()
+        {
+            return CurrentAct switch
+            {
+                0 => "Act I",
+                100 => "Act II",
+                200 => "Act III",
+                300 => "Act IV",
+                400 => "Act V",
+                3000 => "Open World",
+                _ => "Unknown Act"
+            };
+        }
+
+        /// <summary>
+        /// Displays the current quest name, optionally with its ID
+        ///
+        /// - 11 Act I
+        /// - 10 Act II
+        /// - 8 Act III
+        /// - 4 Act IV
+        /// - 8 Act V
+        /// - 3 Open World
+        /// </summary>
+        /// <param name="showId">Optionally show its Id</param>
+        /// <param name="currentQuest">If not set, <see cref="CurrentQuest"/> will be used</param>
+        /// <returns>The Human-Readable quest name</returns>
+        public string GetCurrentQuestName(int? currentQuest = null, bool showId = false)
+        {
+            return Game.GetCurrentQuestName(showId, currentQuest);
+        }
+
+        public delegate void QuestProgressDelegate();
 		public event QuestProgressDelegate OnQuestProgress = delegate { };
 
 		/// <summary>
@@ -160,31 +198,29 @@ namespace DiIiS_NA.D3_GameServer.GSSystem.GameSystem
 			Bounties.AddRange(actToKillUniqueBounties[BountyData.ActT.A5].Take(4));
 		}
 
-		private readonly struct Rewards
-		{
-			public int Experience { get; }
-			public int Gold { get; }
-
-			public Rewards(int experience, int gold)
-			{
-				Experience = experience;
-				Gold = gold;
-			}
-			
-			public Rewards(float experience, float gold) : this((int) Math.Floor(experience), (int) Math.Floor(gold)) {}
-		}
-
-		private Rewards GetCurrentQuestRewards() =>
-			new Rewards(Quests[Game.CurrentQuest].RewardXp, Quests[Game.CurrentQuest].RewardGold);
+        public int CurrentQuest => Game.CurrentQuest;
+        public int CurrentStep => Game.CurrentStep;
+        public int NextStep => GetCurrentQuest().NextStep;
+        public QuestRegistry.QuestStep GetCurrentQuest()
+        {
+            return Quests[Game.CurrentQuest].Steps[Game.CurrentStep];
+        }
 		/// <summary>
 		/// Advances a quest by a step
 		/// </summary>
 		/// <param name="snoQuest">snoID of the quest to advance</param>                               
 		public void Advance()
-		{
-			int oldQuest = Game.CurrentQuest;
-			int oldStep = Game.CurrentStep;
-			Quests[Game.CurrentQuest].Steps[Game.CurrentStep].Completed = true;
+        {
+            Logger.QuestLog($"Advancing from {Game.GetActQuest(true)} to quest step {Game.QuestManager.GetCurrentQuest().NextStep.Markup().Bold().Underline().Color(Color.DarkOliveGreen3_1)}");
+            if (GameServerConfig.Instance.LogQuestAdvance)
+            {
+                Mapping maps = new Mapping();
+                maps.Map("quest", Game.GetCurrentQuestName(true, currentQuest: Game.CurrentQuest));
+                maps.Map("act", Game.GetCurrentActName(true, currentAct: Game.CurrentAct));
+                maps.Map("step", GetCurrentQuest().NextStep);
+                Game.BroadcastMessage(maps.GetString(GameServerConfig.Instance.LogQuestAdvanceFormat));
+            }
+            Quests[Game.CurrentQuest].Steps[Game.CurrentStep].Completed = true;
 			Game.CurrentStep = Quests[Game.CurrentQuest].Steps[Game.CurrentStep].NextStep;
 			Game.QuestProgress.QuestTriggers.Clear();
 			ClearQuestMarker();
@@ -199,13 +235,6 @@ namespace DiIiS_NA.D3_GameServer.GSSystem.GameSystem
 
 			if (Quests[Game.CurrentQuest].Steps[Game.CurrentStep].NextStep != -1)
 			{
-				Logger.QuestInfo(
-					$"{Emoji.Known.RightArrow} Step Advance ".StyleAnsi("deeppink4") + 
-					$"Game #{Game.GameId.StyleAnsi("underline")} " +
-					$"from quest {oldQuest}/" +
-					$"step {oldStep.StyleAnsi("deeppink4")}" +
-					$"to quest {Game.CurrentQuest}'s " +
-					$"step {Game.CurrentStep.StyleAnsi("deeppink4")}");
 			}
 			else
 			{
@@ -213,25 +242,21 @@ namespace DiIiS_NA.D3_GameServer.GSSystem.GameSystem
 				if (!Game.Empty)
 				{
 					SaveQuestProgress(true);
-					Logger.QuestInfo(
-						$"{Emoji.Known.NextTrackButton} Quest Advance ".StyleAnsi("white") + 
-						$"Game #{Game.GameId.StyleAnsi("underline")} " +
-						$"from quest {oldQuest.StyleAnsi("turquoise2")}/" +
-						$"step {oldStep.StyleAnsi("deeppink4")}" +
-						$"to quest {Game.CurrentQuest.StyleAnsi("turquoise2")}/" +
-						$"step {Game.CurrentStep.StyleAnsi("deeppink4")}");
 					Game.BroadcastPlayers((client, player) =>
 					{
-						if (Game.IsCurrentOpenWorld) return; // open world quest
+						if (Game.CurrentQuest == 312429) return; // open world quest
 
-						var rewards = GetCurrentQuestRewards();
+						int xpReward = (int)(Quests[Game.CurrentQuest].RewardXp *
+						                     Game.XpModifier);
+						int goldReward = (int)(Quests[Game.CurrentQuest].RewardGold *
+						                       Game.GoldModifier);
 						player.InGameClient.SendMessage(new QuestStepCompleteMessage()
 						{
 							QuestStepComplete = QuestStepComplete.CreateBuilder()
 
 								.SetReward(QuestReward.CreateBuilder()
-									.SetGoldGranted(rewards.Gold)
-									.SetXpGranted((ulong)rewards.Experience)
+									.SetGoldGranted(goldReward)
+									.SetXpGranted((ulong)xpReward)
 									.SetSnoQuest(Game.CurrentQuest)
 								)
 								.SetIsQuestComplete(true)
@@ -247,7 +272,7 @@ namespace DiIiS_NA.D3_GameServer.GSSystem.GameSystem
 										WorldID = player.World.DynamicID(player),
 									},
 
-									Amount = rewards.Experience,
+									Amount = xpReward,
 									Type = GameServer.MessageSystem.Message.Definitions.Base
 										.FloatingAmountMessage.FloatType.Experience,
 								});
@@ -261,13 +286,13 @@ namespace DiIiS_NA.D3_GameServer.GSSystem.GameSystem
 										WorldID = player.World.DynamicID(player),
 									},
 
-									Amount = rewards.Gold,
+									Amount = goldReward,
 									Type = GameServer.MessageSystem.Message.Definitions.Base
 										.FloatingAmountMessage.FloatType.Gold,
 								});
-						player.UpdateExp(rewards.Experience);
-						player.Inventory.AddGoldAmount(rewards.Gold);
-						player.AddAchievementCounter(74987243307173, (uint)rewards.Gold);
+						player.UpdateExp(xpReward);
+						player.Inventory.AddGoldAmount(goldReward);
+						player.AddAchievementCounter(74987243307173, (uint)goldReward);
 						player.CheckQuestCriteria(Game.CurrentQuest);
 					});
 				}
@@ -284,16 +309,18 @@ namespace DiIiS_NA.D3_GameServer.GSSystem.GameSystem
 					Logger.WarnException(e, "Advance() exception caught:");
 				}
 
-				//Пока только для одного квеста
-				//	if (this.Game.CurrentQuest != 72221)
-				//		if (this.Game.CurrentStep != -1)
-				Advance();
+                Logger.QuestLog(
+                    $"{"(Advance)".Markup().Color(Spectre.Console.Color.White)} Game {Game.GameId.Markup().Bold()} Advanced to quest {Game.GetActQuest(true).Markup().Bold().Color(Color.Aquamarine1_1)}");
+                //Only for one quest so far
+                //	if (this.Game.CurrentQuest != 72221)
+                //		if (this.Game.CurrentStep != -1)
+                Advance();
 			}
 
 			if (!Game.Empty)
 			{
 				RevealQuestProgress();
-				if ((Game.CurrentActEnum != ActEnum.OpenWorld && GameModsConfig.Instance.Quest.AutoSave) ||
+				if ((Game.CurrentActEnum != ActEnum.OpenWorld && GameServerConfig.Instance.AutoSaveQuests) ||
 				    Quests[Game.CurrentQuest].Steps[Game.CurrentStep].Saveable)
 					SaveQuestProgress(false);
 			}
@@ -360,7 +387,7 @@ namespace DiIiS_NA.D3_GameServer.GSSystem.GameSystem
 					{
 						player.World.SpawnRandomEquip(player, player, LootManager.Epic, player.Attributes[GameAttributes.Level]);
 					}
-					var toon = player.Toon.DbToon;
+					var toon = player.Toon.DBToon;
 					toon.EventsCompleted++;
 					Game.GameDbSession.SessionUpdate(toon);
 					player.CheckQuestCriteria(Game.CurrentSideQuest);
@@ -850,7 +877,7 @@ namespace DiIiS_NA.D3_GameServer.GSSystem.GameSystem
 				{
 					var questHistory = new DBQuestHistory
 					{
-						DBToon = player.Toon.DbToon,
+						DBToon = player.Toon.DBToon,
 						QuestId = Game.CurrentQuest,
 						QuestStep = Game.CurrentStep
 					};

@@ -1,5 +1,4 @@
-﻿using System;
-using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.Hireling;
+﻿using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.Hireling;
 using DiIiS_NA.LoginServer.AccountsSystem;
 using DiIiS_NA.LoginServer.Battle;
 

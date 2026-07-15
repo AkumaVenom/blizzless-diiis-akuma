@@ -37,7 +37,7 @@ namespace DiIiS_NA.LoginServer.AccountsSystem
 			{
 				ByteStringPresenceField<D3.OnlineService.EntityId> val = null;
 				if (GameAccount.CurrentToon != null)
-					val = new ByteStringPresenceField<D3.OnlineService.EntityId>(FieldKeyHelper.Program.D3, FieldKeyHelper.OriginatingClass.Account, 1, 0, GameAccount.CurrentToon.D3EntityId);
+					val = new ByteStringPresenceField<D3.OnlineService.EntityId>(FieldKeyHelper.Program.D3, FieldKeyHelper.OriginatingClass.Account, 1, 0, GameAccount.CurrentToon.D3EntityID);
 				else
 				{
 					var Fake = D3.OnlineService.EntityId.CreateBuilder().SetIdHigh(0).SetIdLow(0);
@@ -182,10 +182,10 @@ namespace DiIiS_NA.LoginServer.AccountsSystem
 				{
 					return DBAccount.UserLevel switch
 					{
-						>= UserLevels.Owner => " {icon:bnet} {c_epic}" + bTag + "{/c}",
-						>= UserLevels.GM => " {icon:bnet} {c_legendary}" + bTag + "{/c}",
-						>= UserLevels.Tester => " {icon:bnet} {c_rare}" + bTag + "{/c}",
-						_ => " {icon:bnet} " + bTag
+						>= UserLevels.Owner => "{c_epic}" + bTag + "{/c}",
+						>= UserLevels.GM => " {c_legendary}" + bTag + "{/c}",
+						>= UserLevels.Tester => "{c_rare}" + bTag + "{/c}",
+						_ => bTag
 					};
 				}
 				

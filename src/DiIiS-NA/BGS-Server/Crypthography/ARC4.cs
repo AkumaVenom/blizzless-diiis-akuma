@@ -32,8 +32,10 @@
 			{
 				index2 = (byte)(key[index1] + _state[counter] + index2);
 				// swap byte
-				(_state[counter], _state[index2]) = (_state[index2], _state[counter]);
-                index1 = (byte)((index1 + 1) % key.Length);
+				byte tmp = _state[counter];
+				_state[counter] = _state[index2];
+				_state[index2] = tmp;
+				index1 = (byte)((index1 + 1) % key.Length);
 			}
 		}
 
@@ -44,9 +46,11 @@
 				x = (byte)(x + 1);
 				y = (byte)(_state[x] + y);
 				// swap byte
-				(_state[x], _state[y]) = (_state[y], _state[x]);
+				byte tmp = _state[x];
+				_state[x] = _state[y];
+				_state[y] = tmp;
 
-                byte xorIndex = (byte)(_state[x] + _state[y]);
+				byte xorIndex = (byte)(_state[x] + _state[y]);
 				outputBuffer[outputOffset + counter] = (byte)(inputBuffer[inputOffset + counter] ^ _state[xorIndex]);
 			}
 			return inputCount;

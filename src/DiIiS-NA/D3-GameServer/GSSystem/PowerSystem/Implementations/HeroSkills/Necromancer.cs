@@ -4,7 +4,6 @@ using DiIiS_NA.D3_GameServer.Core.Types.SNO;
 using DiIiS_NA.GameServer.Core.Types.Math;
 using DiIiS_NA.GameServer.Core.Types.SNO;
 using DiIiS_NA.GameServer.Core.Types.TagMap;
-using DiIiS_NA.GameServer;
 using DiIiS_NA.GameServer.GSSystem.ActorSystem;
 using DiIiS_NA.GameServer.GSSystem.ActorSystem.Implementations.Minions;
 using DiIiS_NA.GameServer.GSSystem.PowerSystem.Payloads;
@@ -506,34 +505,8 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
             {
                 attack.Targets ??= new TargetList();
                 attack.Targets.Actors ??= new List<Actor>();
-
-                if (GameServerConfig.Instance.NecromancerBloodBuildSeason3Enabled)
-                {
-                    // D4 Season 3-inspired "Blood Build" behavior:
-                    // latch onto multiple nearby enemies around the aimed point.
-                    var multi = GetEnemiesInRadius(TargetPosition, 15f);
-                    // Only latch onto enemies within a screen-ish distance of the player.
-                    if (multi?.Actors != null)
-                    {
-                        multi.Actors = multi.Actors
-                            .Where(a => a != null && PowerMath.Distance2D(User.Position, a.Position) <= BloodBuildMaxScreenDistanceToPlayer)
-                            .OrderBy(a => PowerMath.Distance2D(TargetPosition, a.Position))
-                            .Take(BloodBuildMaxSiphonTargets)
-                            .ToList();
-                    }
-                    attack.Targets = multi;
-                    attack.Targets ??= new TargetList();
-                    attack.Targets.Actors ??= new List<Actor>();
-
-                    // Fallback to retail single-target if no valid enemies were found.
-                    if (attack.Targets.Actors.Count == 0 && Target != null)
-                        attack.Targets.Actors.Add(Target);
-                }
-                else
-                {
-                    if (Target != null)
-                        attack.Targets.Actors.Add(Target);
-                }
+                if (Target != null)
+                    attack.Targets.Actors.Add(Target);
                 DamageType DType = DamageType.Physical;
                 if (Rune_A > 0) DType = DamageType.Cold;
                 else if (Rune_D > 0) DType = DamageType.Poison;
@@ -547,11 +520,6 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
                     ((Player) User).AddPercentageHP(2);
                     if (Rune_C < 1)
                         GeneratePrimaryResource(15f);
-// Optional custom execution explosions (D4 S3-inspired).
-if (GameServerConfig.Instance.NecromancerBloodBuildSeason3Enabled)
-{
-    TryTriggerBloodBuildExplosion(hit.Target, 2, 1.0f);
-}
 
                 };
 
@@ -585,183 +553,6 @@ if (GameServerConfig.Instance.NecromancerBloodBuildSeason3Enabled)
             attack.Apply();
             yield break;
         }
-
-// --- Custom "Blood Build" helpers --------------------------------------------------------
-
-private const float BloodBuildExecuteHpThreshold = 0.40f;
-private const float BloodBuildExplosionRadius = 10f;
-private const float BloodBuildExplosionDamage = 1.75f; // weapon damage multiplier (kept moderate)
-private const float BloodBuildExplosionCooldownSeconds = 0.8f;
-	// Smooth CPU spikes when many enemies cross the execute threshold at once.
-	// Keeps gameplay feel (procs still happen), but prevents a single server tick from detonating dozens of chains.
-	private const float BloodBuildExecBurstWindowSeconds = 0.20f;
-	private const int BloodBuildExecMaxProcsPerBurstWindow = 2;
-private const int BloodBuildMaxSiphonTargets = 5;
-private const float BloodBuildMaxScreenDistanceToPlayer = 60f; // "end of screen" heuristic
-private const float BloodBuildCorpseChainRadius = 11f;
-private const int BloodBuildMaxCorpsesToDetonatePerExplosion = 2;
-private const float BloodBuildCorpseDetonationDamageScale = 0.75f;
-private const int BloodBuildMaxCorpseChainDepth = 2;
-
-
-
-private void SpawnBloodBuildExplosionFx(Vector3D position)
-{
-    // Corpse Explosion-like VFX so it is obvious the proc fired.
-    var fx = SpawnEffect(ActorSno._p6_necro_corpseexplosion_projectile_spawn, position, 0, WaitSeconds(0.2f));
-    fx?.PlayEffectGroup(457183);
-}
-
-private void DetonateNearbyRealCorpses(Vector3D center, int chainDepth, float chainDamageScale)
-{
-    if (chainDepth <= 0 || chainDamageScale <= 0f) return;
-
-	    // Find existing Necromancer corpses and detonate a limited number for chain reactions.
-	    // NOTE: GetActorsInRange already allocates a list; avoid additional LINQ allocations and ToList().
-	    var nearby = User.GetActorsInRange(center, BloodBuildCorpseChainRadius);
-	    if (nearby == null || nearby.Count == 0) return;
-	
-	    int detonated = 0;
-	    for (int i = 0; i < nearby.Count && detonated < BloodBuildMaxCorpsesToDetonatePerExplosion; i++)
-    {
-	        var corpse = nearby[i];
-	        if (corpse == null || corpse.Dead) continue;
-	        if (corpse.SNO != ActorSno._p6_necro_corpse_flesh) continue;
-
-        // Re-use the same explosion logic, but scaled down to avoid making it too easy.
-        TriggerBloodBuildExplosionAttack(corpse.Position,
-            Math.Min(chainDepth, BloodBuildMaxCorpseChainDepth),
-            chainDamageScale * BloodBuildCorpseDetonationDamageScale,
-            corpse);
-
-        corpse.Destroy();
-	        detonated++;
-    }
-}
-
-
-private void TryTriggerBloodBuildExplosion(Actor victim, int chainDepth, float chainDamageScale)
-{
-    if (victim == null || victim.Dead) return;
-
-    // Prevent spam / infinite loops.
-    if (HasBuff<BloodBuildExplosionLockout>(victim))
-        return;
-
-    float maxHp = victim.Attributes[GameAttributes.Hitpoints_Max_Total];
-    if (maxHp <= 0) return;
-
-    float curHp = victim.Attributes[GameAttributes.Hitpoints_Cur];
-    float hpRatio = curHp / maxHp;
-
-    if (hpRatio > BloodBuildExecuteHpThreshold)
-        return;
-
-	    // Burst limiter (per-user) to smooth large execute waves into a couple of procs over a few ticks.
-	    // Checked late so we don't consume budget on ineligible targets.
-	    if (!TryConsumeBloodBuildExecProc())
-	        return;
-
-    AddBuff(victim, new BloodBuildExplosionLockout(WaitSeconds(BloodBuildExplosionCooldownSeconds)));
-
-    // Spawn a lightweight invisible proxy at the victim (simulated corpse).
-    var corpseProxy = SpawnProxy(victim.Position);
-
-    TriggerBloodBuildExplosionAttack(victim.Position, chainDepth, chainDamageScale, corpseProxy);
-
-    // Detonate nearby real Necromancer corpses to strengthen the chain reaction feel.
-    DetonateNearbyRealCorpses(victim.Position, chainDepth, chainDamageScale);
-
-    corpseProxy?.Destroy();
-}
-
-private void TriggerBloodBuildExplosionAttack(Vector3D center, int chainDepth, float chainDamageScale, Actor sourceProxy)
-{
-	    // FX once per explosion (avoid double-spawning in TryTrigger/Detonate paths).
-	    SpawnBloodBuildExplosionFx(center);
-
-    if (chainDamageScale <= 0f) return;
-
-    var explosion = new AttackPayload(this)
-    {
-        Targets = GetEnemiesInRadius(center, BloodBuildExplosionRadius)
-    };
-
-    explosion.AddWeaponDamage(BloodBuildExplosionDamage * chainDamageScale, DamageType.Physical);
-
-    explosion.OnHit = hit =>
-    {
-        // Mild extra VFX on each hit target.
-        SpawnEffect(ActorSno._p6_necro_bonespikes, hit.Target.Position, 0, WaitSeconds(0.1f));
-
-        // Chain reaction: only a couple of hops, and with diminishing damage.
-        if (chainDepth > 0)
-            TryTriggerBloodBuildExplosion(hit.Target, chainDepth - 1, chainDamageScale * 0.6f);
-    };
-
-    explosion.Apply();
-}
-
-	private bool TryConsumeBloodBuildExecProc()
-	{
-	    if (User?.World?.BuffManager == null) return true;
-
-	    var limiter = User.World.BuffManager.GetFirstBuff<BloodBuildExecBurstLimiter>(User);
-	    if (limiter == null)
-	    {
-	        limiter = new BloodBuildExecBurstLimiter(WaitSeconds(BloodBuildExecBurstWindowSeconds));
-	        AddBuff(User, limiter);
-	    }
-	    return limiter.TryConsume(BloodBuildExecMaxProcsPerBurstWindow);
-	}
-
-	private class BloodBuildExecBurstLimiter : TimedBuff
-	{
-	    private int _count;
-
-	    public BloodBuildExecBurstLimiter(TickTimer timeout)
-	    {
-	        Timeout = timeout;
-	    }
-
-	    public override bool Apply()
-	    {
-	        _count = 0;
-	        return base.Apply();
-	    }
-
-	    // If the buff is re-added for any reason, keep the longer window but reset the counter.
-	    public override bool Stack(Buff buff)
-	    {
-	        _count = 0;
-	        return base.Stack(buff);
-	    }
-
-	    public bool TryConsume(int max)
-	    {
-	        if (_count >= max) return false;
-	        _count++;
-	        return true;
-	    }
-	}
-
-private class BloodBuildExplosionLockout : Buff
-{
-    private readonly TickTimer _timeout;
-
-    public BloodBuildExplosionLockout(TickTimer timeout)
-    {
-        _timeout = timeout;
-    }
-
-	    public override bool Update()
-	    {
-	        // Return true when the buff should be removed.
-	        return (_timeout != null && _timeout.TimedOut) || Removed;
-	    }
-}
-
-// -----------------------------------------------------------------------------------------
         [ImplementsPowerBuff(6, true)]
         public class BustBuff : PowerBuff
         {
@@ -1397,66 +1188,6 @@ private class BloodBuildExplosionLockout : Buff
         #endregion
         public override IEnumerable<TickTimer> Main()
         {
-            // Optional D4 Season 3-inspired Blood Nova (no rune required) - enabled via config.
-            if (GameServerConfig.Instance.NecromancerBloodBuildSeason3Enabled)
-            {
-                UsePrimaryResource(EvalTag(PowerKeys.ResourceCost));
-
-                // Primary pulse (from player)
-                const float primaryRadius = 25f;
-                const float primaryDmg = 3.25f; // tuned to feel strong without corpse interaction
-                const float secondaryRadius = 12f;
-                const float secondaryDmg = 1.75f; // smaller/weaker anchored pulses
-                const int maxAnchors = 8;
-
-                // Visual feedback (kept lightweight to avoid stutter)
-                User.PlayEffectGroup(462662);
-
-                var anchors = new List<Actor>(maxAnchors);
-
-                var primary = new AttackPayload(this)
-                {
-                    Targets = GetEnemiesInRadius(User.Position, primaryRadius)
-                };
-                primary.AddWeaponDamage(primaryDmg, DamageType.Physical);
-                primary.OnHit = hit =>
-                {
-                    if (hit?.Target == null)
-                        return;
-
-                    if (anchors.Count >= maxAnchors)
-                        return;
-
-                    var t = hit.Target;
-                    if (t == null || t.World == null)
-                        return;
-
-                    if (!anchors.Contains(t))
-                        anchors.Add(t);
-                };
-                primary.Apply();
-
-                // Secondary pulse: each enemy hit emits a smaller Blood Nova (array-based, capped)
-                foreach (var a in anchors)
-                {
-                    if (a == null || a.World == null)
-                        continue;
-
-                    var proxy = SpawnProxy(a.Position, new TickTimer(User.World.Game, 2));
-                    proxy.PlayEffectGroup(462662);
-
-                    var secondary = new AttackPayload(this)
-                    {
-                        Targets = GetEnemiesInRadius(a.Position, secondaryRadius)
-                    };
-                    secondary.AddWeaponDamage(secondaryDmg, DamageType.Physical);
-                    secondary.Apply();
-                }
-
-                yield break;
-            }
-
-
 
             UsePrimaryResource(EvalTag(PowerKeys.ResourceCost));
             //462392
@@ -1533,7 +1264,7 @@ private class BloodBuildExplosionLockout : Buff
         }
     }
     #endregion
-    //Done - testing, apparently Rune_A not working.
+    //Done 
     #region CorpseExlosion
 
     [ImplementsPowerSNO(SkillsSystem.Skills.Necromancer.ExtraSkills.CorpseExlosion)]
@@ -1541,86 +1272,72 @@ private class BloodBuildExplosionLockout : Buff
     {
         public override IEnumerable<TickTimer> Main()
         {
-            // Initializing main variables for Bonespikes ability.
-            float radius = 20f;
-            float damage = 10.5f;
-            DamageType damageType = DamageType.Physical;
-
-            // Fetching the data for the respective Power from the MPQ cache.
-            var powerData = (DiIiS_NA.Core.MPQ.FileFormats.Power)MPQStorage.Data.Assets[SNOGroup.Power][PowerSNO].Data;
-
-            // Creating a point effect on the target position, playing various effect groups depending on the selected Rune.
-            var point = SpawnEffect(ActorSno._p6_necro_bonespikes, TargetPosition, 0, WaitSeconds(0.2f));
-            point.PlayEffect(Effect.PlayEffectGroup, RuneSelect(459954, 473926, 459954, 473907, 459954, 473864));
-
-            // Depending on a specific game attribute, either spawn a new monster at the target position, or select up to five existing corpses.
+            //ScriptFormulaDetails_Fields
+            //PowerDefinition_Fields
+            //Мертвячинка) - if (player.SkillSet.HasPassive(208594)) 454066
+            if (Rune_B > 0)
+                ((Player) User).AddPercentageHP(-2);
+            float Radius = 20f;
+            float Damage = 10.5f;
+            DamageType DType = DamageType.Physical;
+            var PowerData = (DiIiS_NA.Core.MPQ.FileFormats.Power)MPQStorage.Data.Assets[SNOGroup.Power][PowerSNO].Data;
+            var Point = SpawnEffect(ActorSno._p6_necro_bonespikes, TargetPosition, 0, WaitSeconds(0.2f));
+            Point.PlayEffect(Effect.PlayEffectGroup, RuneSelect(459954, 473926, 459954, 473907, 459954//D
+                , 473864));
             var actors = User.Attributes[GameAttributes.Necromancer_Corpse_Free_Casting]
                 ? new List<uint> { User.World.SpawnMonster(ActorSno._p6_necro_corpse_flesh, TargetPosition).GlobalID }
-                : User.GetActorsInRange(TargetPosition, 11).Where(x => x.SNO == ActorSno._p6_necro_corpse_flesh)
-                    .Select(x => x.GlobalID).Take(5).ToList();
-
-            // Modifying main parameters of the ability depending on the selected Rune.
+                : User.GetActorsInRange(TargetPosition, 11).Where(x => x.SNO == ActorSno._p6_necro_corpse_flesh).Select(x => x.GlobalID).Take(5).ToList();
             if (Rune_D > 0)
-            {
-                radius = 25f;
-            }
-            else if (Rune_C > 0) // Licking action.
-            {
-                damage = 15.75f;
-                damageType = DamageType.Poison;
-            }
+                Radius = 25f;
+            else if (Rune_C > 0)//licking action
+            { Damage = 15.75f; DType = DamageType.Poison; }
             else if (Rune_A > 0)
-            {
-                damageType = DamageType.Poison;
-            }
+                DType = DamageType.Poison;
 
-            // Applying the effects of the Bonespikes ability on the selected corpses.
             foreach (var actor in actors)
             {
+
                 if (Rune_B > 0)
                 {
                     var bomb = World.GetActorByGlobalId(actor);
                     var nearestEnemy = bomb.GetActorsInRange(20f).First();
                     if (nearestEnemy != null)
                         bomb.Teleport(nearestEnemy.Position);
+                    
                 }
-
-                // Spawning explosion effect.
-                var explosionEffect = SpawnEffect(
+                    
+                var Explosion = SpawnEffect(
                     ActorSno._p6_necro_corpseexplosion_projectile_spawn,
                     World.GetActorByGlobalId(actor).Position,
                     ActorSystem.Movement.MovementHelpers.GetFacingAngle(User, World.GetActorByGlobalId(actor)),
                     WaitSeconds(0.2f)
                 );
-                explosionEffect.PlayEffect(Effect.PlayEffectGroup,
-                    RuneSelect(457183, 471539, 471258, 471249, 471247, 471236));
-                explosionEffect.UpdateDelay = 0.1f;
+                Explosion.PlayEffect(Effect.PlayEffectGroup, RuneSelect(457183, 471539, 471258, 471249, 471247, 471236));
 
-                explosionEffect.OnUpdate = () =>
+                Explosion.UpdateDelay = 0.1f;
+                Explosion.OnUpdate = () =>
                 {
-                    // Creating the attack payload.
-                    AttackPayload attack = new(this)
+                    AttackPayload attack = new AttackPayload(this)
                     {
-                        Targets = GetEnemiesInRadius(User.Position, radius)
+                        Targets = GetEnemiesInRadius(User.Position, Radius)
                     };
 
                     if (Rune_E > 0)
-                        damageType = DamageType.Cold;
-
-                    // Applying weapon damage.
-                    attack.AddWeaponDamage(damage, damageType);
+                        DType = DamageType.Cold;
+                    
+                    attack.AddWeaponDamage(Damage, DType);
                     attack.OnHit = hitPayload =>
                     {
                         if (Rune_E > 0)
                             AddBuff(hitPayload.Target, new DebuffFrozen(WaitSeconds(2f)));
                     };
-                    // Applying the attack.
                     attack.Apply();
                 };
-                // Destroying the selected corpse.
                 World.GetActorByGlobalId(actor).Destroy();
             }
 
+
+            //});
             yield break;
         }
     }
@@ -2304,7 +2021,12 @@ private class BloodBuildExplosionLockout : Buff
                     skeleton.SetVisible(true);
                     skeleton.Hidden = false;
                     skeleton.PlayEffectGroup(474172);
-                    
+
+                    AttackPayload attack = new AttackPayload(this)
+                    {
+                        Target = Target
+                    };
+
                     // Commanded skeletons go into a frenzy, gaining 25% increased attack speed as long as they attacked the Commanded target (in addition to damage bonus).
                     if (frenzy)
                     {
@@ -2313,7 +2035,11 @@ private class BloodBuildExplosionLockout : Buff
                             var originalAttackSpeed = skeleton.Attributes[GameAttributes.Attacks_Per_Second];
                             skeleton.Attributes.FixedMap.Add(FixedAttribute.AttackSpeed, 
                                 attr => attr[GameAttributes.Attacks_Per_Second] = originalAttackSpeed * 1.25f,
-                                () => skeleton.Attributes[GameAttributes.Attacks_Per_Second] = originalAttackSpeed);
+                                (act) =>
+                                {
+                                    skeleton.Attributes[GameAttributes.Attacks_Per_Second] = originalAttackSpeed;
+                                });
+                            attack.AddWeaponDamage(greaterDamage ? 3.15f : 1.0f, damageType);
                             skeleton.Attributes.BroadcastChangedIfRevealed();
                         }
                     }
@@ -2324,13 +2050,9 @@ private class BloodBuildExplosionLockout : Buff
                             skeleton.Attributes.FixedMap.Remove(FixedAttribute.AttackSpeed);
                             skeleton.Attributes.BroadcastChangedIfRevealed();
                         }
+                        attack.AddWeaponDamage(greaterDamage ? 2.15f : 1.0f, damageType);
                     }
-                    AttackPayload attack = new AttackPayload(this)
-                    {
-                        Target = Target
-                    };
                     
-                    attack.AddWeaponDamage(greaterDamage ? 2.15f : 1.0f, damageType);
                     attack.OnHit = hit =>
                     {
                         if (freezingGrasp)
@@ -2864,12 +2586,19 @@ private class BloodBuildExplosionLockout : Buff
         #endregion
         public override IEnumerable<TickTimer> Main()
         {
-            StartCooldown(EvalTag(PowerKeys.CooldownTime));
+            if (BalanceConfig.Instance.FixedCooldownSeconds >= 0)
+            {
+                StartCooldown(BalanceConfig.Instance.FixedCooldownSeconds);
+            }
+            else
+            {
+                StartCooldown(EvalTag(PowerKeys.CooldownTime)); // original implementation
+            }
             var skillData = MPQStorage.Data.Assets[SNOGroup.Power][460358].Data;
 
             var effectSno = ActorSno._necro_aotd_a_emitter;
             float range = 15f;
-            float damage = 120.0f;
+            float damage = 120.0f * BalanceConfig.Instance.NecroArmyOfTheDeadDamageMultiplier;
             var damageType = DamageType.Physical;
             float time = 1.0f;
             //Морозная шняга
@@ -2977,7 +2706,8 @@ private class BloodBuildExplosionLockout : Buff
         #endregion
         public override IEnumerable<TickTimer> Main()
         {
-            StartCooldown(EvalTag(PowerKeys.CooldownTime));
+            StartCooldown(EvalTag(PowerKeys.CooldownTime)); // original implementation
+
             var DataOfSkill = MPQStorage.Data.Assets[SNOGroup.Power][465839].Data;
 
             AddBuff(User, new ZBuff());

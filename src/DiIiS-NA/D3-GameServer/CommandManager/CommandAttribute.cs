@@ -15,6 +15,8 @@ namespace DiIiS_NA.GameServer.CommandManager
 		/// </summary>
 		public string Name { get; private set; }
 
+		public string Shortcut { get; private set; }
+
 		/// <summary>
 		/// Help text for command group.
 		/// </summary>
@@ -30,13 +32,17 @@ namespace DiIiS_NA.GameServer.CommandManager
 		/// </summary>
 		public bool InGameOnly { get; }
 
-		public CommandGroupAttribute(string name, string help, Account.UserLevels minUserLevel = Account.UserLevels.Admin, bool inGameOnly = false)
+		public bool Disabled { get; }
+
+		public CommandGroupAttribute(string name, string help, Account.UserLevels minUserLevel = Account.UserLevels.Admin, bool inGameOnly = false, bool disabled = false, string? shortcut = null)
 		{
 			Name = name.ToLower();
-			Help = help;
+            Shortcut = shortcut;
+            Help = help;
 			MinUserLevel = minUserLevel;
 			InGameOnly = inGameOnly;
-		}
+            Disabled = disabled;
+        }
 	}
 
 	[AttributeUsage(AttributeTargets.Method)]
@@ -46,6 +52,9 @@ namespace DiIiS_NA.GameServer.CommandManager
 		/// Command's name.
 		/// </summary>
 		public string Name { get; private set; }
+
+		/// <summary>Short name</summary>
+		public string? Shortcut { get; }
 
 		/// <summary>
 		/// Help text for command.
@@ -62,9 +71,10 @@ namespace DiIiS_NA.GameServer.CommandManager
 		/// </summary>
 		public bool InGameOnly { get; }
 
-		public CommandAttribute(string command, string help, Account.UserLevels minUserLevel = Account.UserLevels.User, bool inGameOnly = false)
+		public CommandAttribute(string command, string help, Account.UserLevels minUserLevel = Account.UserLevels.User, bool inGameOnly = false, string? shortcut = null)
 		{
 			Name = command.ToLower();
+            Shortcut = shortcut;
 			Help = help;
 			MinUserLevel = minUserLevel;
 			InGameOnly = inGameOnly;
@@ -75,7 +85,7 @@ namespace DiIiS_NA.GameServer.CommandManager
 	public class DefaultCommand : CommandAttribute
 	{
 		public DefaultCommand(Account.UserLevels minUserLevel = Account.UserLevels.User, bool inGameOnly = false)
-			: base("", "", minUserLevel, inGameOnly)
+			: base("", "", minUserLevel, inGameOnly, shortcut: null)
 		{
 		}
 	}

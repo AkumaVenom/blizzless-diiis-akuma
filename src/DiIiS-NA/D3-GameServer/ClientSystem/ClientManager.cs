@@ -34,7 +34,7 @@ namespace DiIiS_NA.GameServer.ClientSystem
 
         public void Consume(GameClient client, GameMessage message)
         {
-            if (message is JoinBNetGameMessage gameMessage) OnJoinGame(client, gameMessage);
+            if (message is JoinBNetGameMessage) OnJoinGame(client, (JoinBNetGameMessage)message);
         }
 
 		public void OnJoinGame(GameClient client, JoinBNetGameMessage message)

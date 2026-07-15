@@ -1,5 +1,6 @@
 ﻿using CrystalMpq;
 using DiIiS_NA.Core.Logging;
+using Spectre.Console;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -24,18 +25,22 @@ namespace DiIiS_NA.Core.MPQ
         {
             this.Loaded = false;
             this.RequiredVersion = requiredVersion;
-
-            foreach (var file in baseFiles)
-            {
-                var mpqFile = MPQStorage.GetMPQFile(file);
-                if (mpqFile == null)
+            AnsiConsole.Status()
+                .Start("Processing MPQs...", ctx =>
                 {
-                    Logger.Fatal("Cannot find base MPQ file: $[white on red]${0}$[/]$.", file);
-                    return;
-                }
-                this.BaseMPQFiles.Add(mpqFile);
-                Logger.Debug($"Added MPQ storage: $[white underline]${file}$[/]$.");
-            }
+                    foreach (var file in baseFiles)
+                    {
+                        var mpqFile = MPQStorage.GetMPQFile(file);
+                        if (mpqFile == null)
+                        {
+                            AnsiConsole.MarkupLine($"MPQ File not found [red]{file}[/]");
+                            return;
+                        }
+                        BaseMPQFiles.Add(mpqFile);
+                        ctx.Status($"Added MPQ storage {file}");
+                    }
+                });
+            
 
             this.PatchPattern = patchPattern;
             this.ConstructChain();
@@ -45,7 +50,7 @@ namespace DiIiS_NA.Core.MPQ
                 this.Loaded = true;
             else
             {
-                Logger.Error("Required patch-chain version {0} is not satisfied (found version: {1}).", this.RequiredVersion, topMostMPQVersion);
+                Logger.Error("Required patch-chain version {0} is not satified (found version: {1}).", this.RequiredVersion, topMostMPQVersion);
             }
         }
 

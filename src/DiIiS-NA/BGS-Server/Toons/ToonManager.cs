@@ -240,7 +240,7 @@ namespace DiIiS_NA.LoginServer.Toons
 			
 			var newDBToon = new DBToon
 			{
-				Class = @Toon.GetClassById(classId),
+				Class = @Toon.GetClassByID(classId),
 				Name = name,
 				/*HashCode = GetUnusedHashCodeForToonName(name),*/
 				Flags = toonFlags,
@@ -309,19 +309,19 @@ namespace DiIiS_NA.LoginServer.Toons
 		public static void CreateStartEquipment(Toon toon, bool isHardcore)
 		{
 			DBInventory pants = NewbiePants;
-			pants.DBToon = toon.DbToon;
+			pants.DBToon = toon.DBToon;
 			pants.DBGameAccount = toon.GameAccount.DBGameAccount;
 			pants.isHardcore = isHardcore;
 			DBSessions.SessionSave(pants);
 
 			DBInventory armor = NewbieArmor;
-			armor.DBToon = toon.DbToon;
+			armor.DBToon = toon.DBToon;
 			armor.DBGameAccount = toon.GameAccount.DBGameAccount;
 			armor.isHardcore = isHardcore;
 			DBSessions.SessionSave(armor);
 
 			DBInventory weapon;
-			switch (toon.DbToon.Class)
+			switch (toon.DBToon.Class)
 			{
 				case ToonClass.Barbarian:
 					weapon = NewbieAxe;
@@ -348,14 +348,14 @@ namespace DiIiS_NA.LoginServer.Toons
 					weapon = NewbieKnife;
 					break;
 			}
-			weapon.DBToon = toon.DbToon;
+			weapon.DBToon = toon.DBToon;
 			weapon.DBGameAccount = toon.GameAccount.DBGameAccount;
 			weapon.isHardcore = isHardcore;
 			DBSessions.SessionSave(weapon);
-			if (toon.DbToon.Class == ToonClass.Crusader) //add shield
+			if (toon.DBToon.Class == ToonClass.Crusader) //add shield
 			{
 				weapon = NewbieShield;
-				weapon.DBToon = toon.DbToon;
+				weapon.DBToon = toon.DBToon;
 				weapon.DBGameAccount = toon.GameAccount.DBGameAccount;
 				weapon.isHardcore = isHardcore;
 				DBSessions.SessionSave(weapon);
@@ -367,7 +367,7 @@ namespace DiIiS_NA.LoginServer.Toons
 			DBSessions.SessionSave(new DBHireling
 			{
 				Class = type,
-				DBToon = toon.DbToon,
+				DBToon = toon.DBToon,
 				Skill1SNOId = -1,
 				Skill2SNOId = -1,
 				Skill3SNOId = -1,

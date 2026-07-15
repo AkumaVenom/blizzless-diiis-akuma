@@ -10,7 +10,6 @@ using DiIiS_NA.Core.Helpers.Math;
 using DiIiS_NA.Core.Logging;
 using DiIiS_NA.Core.MPQ;
 using DiIiS_NA.Core.MPQ.FileFormats;
-using DiIiS_NA.D3_GameServer;
 using DiIiS_NA.D3_GameServer.Core.Types.SNO;
 using DiIiS_NA.GameServer.Core.Types.Math;
 using DiIiS_NA.GameServer.Core.Types.QuadTrees;
@@ -23,9 +22,7 @@ using DiIiS_NA.GameServer.GSSystem.GameSystem;
 using DiIiS_NA.GameServer.GSSystem.ItemsSystem;
 using DiIiS_NA.GameServer.GSSystem.ObjectsSystem;
 using DiIiS_NA.GameServer.GSSystem.PlayerSystem;
-using DiIiS_NA.GameServer.GSSystem.BotSystem;
 using DiIiS_NA.GameServer.GSSystem.PowerSystem;
-using DiIiS_NA.GameServer.GSSystem.TickerSystem;
 using DiIiS_NA.GameServer.MessageSystem;
 using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.ACD;
 using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.Animation;
@@ -33,6 +30,8 @@ using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.Misc;
 using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.World;
 using DiIiS_NA.GameServer.MessageSystem.Message.Fields;
 using DiIiS_NA.LoginServer.Toons;
+using DiIiS_NA.Utilities;
+using NHibernate.Cfg.XmlHbmBinding;
 using Actor = DiIiS_NA.GameServer.GSSystem.ActorSystem.Actor;
 using Circle = DiIiS_NA.GameServer.Core.Types.Misc.Circle;
 using Environment = DiIiS_NA.Core.MPQ.FileFormats.Environment;
@@ -46,54 +45,6 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 		static readonly Logger Logger = LogManager.CreateLogger();
 		public readonly Dictionary<World, List<Item>> DbItems = new(); //we need this list to delete item_instances from items which have no owner anymore.
 		public readonly Dictionary<ulong, Item> CachedItems = new();
-
-
-		// Ground loot cleanup: remove unpicked items/gold after a short delay to prevent sessions filling up with loot.
-		private readonly object _groundLootCleanupLock = new();
-		private readonly Dictionary<uint, TickTimer> _groundLootCleanupTimers = new();
-		private const float GroundLootCleanupSeconds = 180f; // 3 minutes
-
-		internal void ScheduleGroundLootCleanup(Item item)
-		{
-			if (item == null || Game == null) return;
-			if (item.World != this) return;
-			if (item.Owner != null) return; // already owned (inventory / picked up)
-			if (!item.HasWorldLocation) return;
-
-			lock (_groundLootCleanupLock)
-			{
-				if (_groundLootCleanupTimers.ContainsKey(item.GlobalID))
-					return;
-
-				_groundLootCleanupTimers[item.GlobalID] = TickTimer.WaitSeconds(Game, GroundLootCleanupSeconds, _ =>
-				{
-					try
-					{
-						// Only destroy if still sitting on the ground.
-						if (item.World == this && item.Owner == null && item.HasWorldLocation)
-							item.Destroy();
-					}
-					catch
-					{
-						// ignore; cleanup must never crash the game loop
-					}
-				});
-			}
-		}
-
-		internal void UnregisterGroundLootCleanup(Item item)
-		{
-			if (item == null) return;
-			UnregisterGroundLootCleanup(item.GlobalID);
-		}
-
-		internal void UnregisterGroundLootCleanup(uint itemGlobalId)
-		{
-			lock (_groundLootCleanupLock)
-			{
-				_groundLootCleanupTimers.Remove(itemGlobalId);
-			}
-		}
 
 		public int LastCEId = 3000;
 
@@ -188,6 +139,8 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 
 		public static bool PvPMapLoaded = false;
 
+        public Player[] GetPlayers() => Players.Values.ToArray();
+
 		public Scene GetSceneBySnoId(int SnoID)
 		{
 			Scene scene = null;
@@ -244,16 +197,6 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 		{
 			get { return Actors.Values.OfType<Monster>().Select(actor => actor).ToList(); }
 		}
-		/// <summary>
-		/// Enumerates monsters in the world without allocating a new List each call.
-		/// Prefer this over the Monsters property in tight loops (AI, combat, etc.).
-		/// </summary>
-		public IEnumerable<Monster> EnumerateMonsters()
-		{
-			// ConcurrentDictionary enumeration is thread-safe for iteration, and avoids a ToList() allocation.
-			return Actors.Values.OfType<Monster>();
-		}
-
 
 		private PowerManager _powerManager;
 		public static PowerManager _PvPPowerManager = new();
@@ -264,13 +207,9 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 		public static BuffManager _PvPBuffManager = new();
 
 		public BuffManager BuffManager => IsPvP ? _PvPBuffManager : _buffManager;
+        public Player? FirstPlayer => Players.FirstOrDefault().Value;
 
-		/// <summary>
-		/// Monster respawn scheduler (used by the server-side bot feature).
-		/// </summary>
-		public MonsterRespawnManager RespawnManager { get; }
-
-		/// <summary>
+        /// <summary>
 		/// Creates a new world for the given game with given snoId.
 		/// </summary>
 		/// <param name="game">The parent game.</param>
@@ -294,7 +233,6 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 			};
 			_powerManager = new PowerManager();
 			_buffManager = new BuffManager();
-			RespawnManager = new MonsterRespawnManager(this);
 
 			Game.AddWorld(this);
 			//this.Game.StartTracking(this); // start tracking the dynamicId for the world.
@@ -312,42 +250,55 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 			}
 		}
 
-		#region update & tick logic
+        #region update & tick logic
 
-		/// <summary>
-		/// Retrieve all portals located within a specified <param name="radius"/> of the given <param name="actor"/>.
-		/// </summary>
-		/// <param name="actor">The actor located near the portals</param>
-		/// <param name="radius">The radius of the portals to be returned is to be specified.</param>
-		/// <returns>Order all existing portals in the world by ascending distance from a specified <param name="actor"></param>.</returns>
-		/// <exception cref="ArgumentNullException">If <param name="actor"></param> is null.</exception>
-		/// <exception cref="ArgumentOutOfRangeException">If <param name="radius"></param> is not null but lesser than 0.</exception>
-		public ImmutableArray<Portal> GetPortals(Actor actor, float? radius = null)
+        public ImmutableArray<Portal> GetPortals(ActorSno actor)
+        {
+            var portals = this.GetPortalsBySNO(actor);
+            return portals.ToImmutableArray();
+        }
+
+        /// <summary>
+        /// Retrieve all portals located within a specified <param name="radius"/> of the given <param name="actor"/>.
+        /// </summary>
+        /// <param name="actor">The actor located near the portals</param>
+        /// <param name="radius">The radius of the portals to be returned is to be specified.</param>
+        /// <returns>Order all existing portals in the world by ascending distance from a specified <param name="actor"></param>.</returns>
+        /// <exception cref="ArgumentNullException">If <param name="actor"></param> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">If <param name="radius"></param> is not null but lesser than 0.</exception>
+        public ImmutableArray<Portal> GetPortals(Actor actor, float? radius = null)
 		{
 			if (actor == null)
 				throw new ArgumentNullException(nameof(actor));
-			if (radius <= 0)
-				throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be greater than zero.");
+			switch (radius)
+            {
+                case <= 0:
+                    throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be greater than zero.");
+                case { } r:
+                    Logger.MethodTrace(
+                        $"All portals near {(actor + actor.GetType().Name).Markup().Underline()}) within {r.Markup().Underline()} radius");
+                    break;
+                default:
+                    Logger.MethodTrace($"All portals near {actor.SNO.Markup().Underline()} ({actor.GetType().Name.Markup().Underline()})");
+                    break;
+            }
 
-			if (radius is { } r)
-				Logger.MethodTrace(
-					$"All portals near $[underline]${actor.SNO} ({actor.GetType().Name})$[/]$ within $[underline]${r}$[/]$ radius");
-			else
-				Logger.MethodTrace($"All portals near $[underline]${actor.SNO} ({actor.GetType().Name})$[/]$");
-
-			return Portals
+            return Actors
+                .Where(portal => portal is Portal)
 				.Where(portal =>
 				{
 					if (radius is not { } r) return true;
 					var position = actor.Position;
-					var distance = portal.Position.DistanceSquared(ref position);
+					var distance = portal.Value.Position.Distance(position);
 					return distance <= radius.Value;
 				})
 				.OrderBy(s =>
 				{
 					var position = actor.Position;
-					return s.Position.DistanceSquared(ref position);
+					return s.Value.Position.Distance(position);
 				})
+                .Select(s=>s.Value)
+                .Cast<Portal>()
 				.ToImmutableArray();
 		}
 
@@ -384,16 +335,10 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 			BuffManager.Update();
 			PowerManager.Update();
 
-
-			UpdateGroundLootCleanup(tickCounter);
-			CleanupNecromancerCorpses(tickCounter);
-
 			if (tickCounter % 6 == 0 && _flippyTimers.Any())
 			{
 				UpdateFlippy(tickCounter);
 			}
-
-			RespawnManager?.Update(tickCounter);
 		}
 
 		#endregion
@@ -579,10 +524,6 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 			AddActor(actor);
 			actor.OnEnter(this);
 
-			// Spawn server-side bots once the first real player enters.
-			if (actor is Player p)
-				BotManager.EnsureWorldBots(this, p);
-
 			// reveal actor to player's in-range.
 			foreach (var player in actor.GetPlayersInRange())
 			{
@@ -606,10 +547,6 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 		public void Leave(Actor actor)
 		{
 			actor.OnLeave(this);
-
-			// If a monster was removed because it died, schedule a respawn (when enabled).
-			if (actor is Monster m)
-				RespawnManager?.OnMonsterRemoved(m);
 
 			foreach (var player in Players.Values)
 			{
@@ -638,25 +575,68 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 
 		#endregion
 
-		#region Отображение только конкретной итерации NPC
-		public Actor ShowOnlyNumNPC(ActorSno SNO, int Num)
-		{
-			Actor Setted = null;
-			foreach (var actor in GetActorsBySNO(SNO))
-			{
-				var isVisible = actor.NumberInWorld == Num;
-				if (isVisible)
-					Setted = actor;
+		#region Display only a specific NPC iteration
+        public Actor ShowOnlyNumNPC(ActorSno sno, int number)
+        {
+            Actor chosenActor = null;
+            foreach (var actor in GetActorsBySNO(sno))
+            {
+                var isVisible = actor.NumberInWorld == number;
+                if (isVisible)
+                    chosenActor = actor;
 
-				actor.Hidden = !isVisible;
-				actor.SetVisible(isVisible);
-				foreach (var plr in Players.Values)
+                actor.Hidden = !isVisible;
+                actor.SetVisible(isVisible);
+                foreach (var plr in Players.Values)
                 {
                     if (isVisible) actor.Reveal(plr); else actor.Unreveal(plr);
-				}
+                }
             }
-			return Setted;
-		}
+            return chosenActor;
+        }
+
+        public void ApplyVisibility(Actor actor, bool visibility)
+        {
+            actor.Hidden = !visibility;
+            actor.SetVisible(visibility);
+            foreach (var plr in Players.Values.ToArray())
+            {
+                if (visibility) actor.Reveal(plr);
+                else actor.Unreveal(plr);
+            }
+        }
+
+        public ImmutableArray<Actor> ShowOnlyNpc(ActorSno sno, int? number = null, Vector3D? nearTo = null, float radius = float.MaxValue)
+        {
+            List<Actor> actors = new();
+
+			if (nearTo is {} point)
+            {
+                int take = 0;
+                foreach (var actor in GetActorsBySno(sno).OrderBy(s=>s.Position.Around(point, radius)))
+                {
+                    actors.Add(actor);
+					ApplyVisibility(actor, true);
+                    take++;
+                    if (number != null && take != number) break;
+                }
+
+                return actors.ToImmutableArray();
+            }
+            else
+            {
+                int take = 0;
+                foreach (var actor in GetActorsBySno(sno))
+                {
+                    actors.Add(actor);
+                    ApplyVisibility(actor, true);
+                    take++;
+                    if (number != null && take != number) break;
+                }
+
+                return actors.ToImmutableArray();
+            }
+        }
 
         #endregion
 
@@ -948,7 +928,7 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 				player.GroundItems[item.GlobalID] = item;
 				DropItem(source, null, item);
 
-				if (source.Attributes[GameAttributes.Level] >= Program.MAX_LEVEL)
+				if (source.Attributes[GameAttributes.Level] >= Program.MaxLevel)
 				{
 					item = ItemGenerator.GenerateRandomCraftItem(player, 35);
 					if (item == null) return;
@@ -1011,7 +991,7 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 		/// <param name="position">The position for drop.</param>
 		public void SpawnGold(Actor source, Player player, int Min = -1)
 		{
-			int amount = (int)(LootManager.GetGoldAmount(player.Attributes[GameAttributes.Level]) * Game.GoldModifier * GameModsConfig.Instance.Rate.Gold);
+			int amount = (int)(LootManager.GetGoldAmount(player.Attributes[GameAttributes.Level]) * Game.GoldModifier * GameServerConfig.Instance.RateMoney);
 			if (Min != -1)
 				amount += Min;
 			var item = ItemGenerator.CreateGold(player, amount); // somehow the actual ammount is not shown on ground /raist.
@@ -1040,33 +1020,43 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 		{
 			return Actors.Values.FirstOrDefault(x => x.SNO == sno && (!onlyVisible || (onlyVisible && x.Visible && !x.Hidden)));
 		}
-		public List<Portal> GetPortalsByLevelArea(int la)
+        public ImmutableArray<Actor> GetActorsBySno(ActorSno sno, bool onlyVisible = false)
+        {
+            return Actors.Values.Where(x => x.SNO == sno && (!onlyVisible || (x.Visible && !x.Hidden))).ToImmutableArray();
+        }
+        public List<Portal> GetPortalsByLevelArea(int levelArea)
 		{
 			List<Portal> portals = new List<Portal>();
 			foreach (var actor in Actors.Values)
 			{
-				if (actor is Portal)
-					if ((actor as Portal).Destination != null)
-						if ((actor as Portal).Destination.DestLevelAreaSNO == la)
-						{
-							bool alreadyAdded = false;
-							foreach (var pt in portals)
-								if (pt.Position == actor.Position) alreadyAdded = true;
-							if (!alreadyAdded)
-								portals.Add(actor as Portal);
-						}
+				if (actor is Portal { Destination: not null } portal)
+					if (portal.Destination.DestLevelAreaSNO == levelArea)
+                    {
+                        bool alreadyAdded = false;
+                        foreach (var pt in portals.Where(pt => pt.Position == actor.Position)) 
+                            alreadyAdded = true;
+                        if (!alreadyAdded)
+                            portals.Add(portal);
+                    }
 			}
 			return portals;
 		}
-		/// <summary>
-		/// Returns all actors matching one of SNOs
-		/// </summary>
-		/// <param name="sno"></param>
-		/// <returns></returns>
-		public List<Actor> GetActorsBySNO(params ActorSno[] sno)
+        /// <summary>
+        /// Returns all actors matching one of SNOs
+        /// </summary>
+        /// <param name="sno"></param>
+        /// <returns></returns>
+        public List<Actor> GetActorsBySNO(params ActorSno[] sno)
         {
-			return Actors.Values.Where(x => sno.Contains(x.SNO)).ToList();
+            return Actors.Values.Where(x => sno.Contains(x.SNO)).ToList();
         }
+        public List<Portal> GetPortalsBySNO(params ActorSno[] sno)
+        {
+            return Actors.Values.Where(x => sno.Contains(x.SNO) && x is Portal).Cast<Portal>().ToList();
+        }
+
+        public static Func<Actor, bool> WhereSceneId(int id) => s => s.CurrentScene.SceneSNO.Id == id;
+
 		/// <summary>
 		/// Returns true if any actors exist under a well defined group
 		/// </summary>
@@ -1132,63 +1122,8 @@ namespace DiIiS_NA.GameServer.GSSystem.MapSystem
 			var item = ItemGenerator.CreatePowerGlobe(player);
 			DropItem(source, player, item);
 		}
-		
-
-
-/// <summary>
-/// Periodically cleans up Necromancer corpses that were not consumed/exploded, to avoid unbounded actor growth.
-/// </summary>
-private const int NecroCorpseCleanupIntervalTicks = 60; // ~1 second (TickCounter units)
-
-private void CleanupNecromancerCorpses(int tickCounter)
-{
-    if (Game == null)
-        return;
-
-    if (tickCounter % NecroCorpseCleanupIntervalTicks != 0)
-        return;
-
-    int lifetimeTicks = (int)(1000f / Game.UpdateFrequency * Game.TickRate * 60f); // 60 seconds
-
-    foreach (var corpse in Actors.Values.OfType<ActorSystem.Implementations.NecromancerFlesh>().ToArray())
-    {
-        if (corpse == null || corpse.World != this)
-            continue;
-
-        int expireTick = corpse.ExpireTick > 0 ? corpse.ExpireTick : corpse.SpawnTick + lifetimeTicks;
-        if (expireTick <= 0)
-            expireTick = tickCounter + 1;
-
-        if (tickCounter >= expireTick)
-        {
-            corpse.SuppressOnDestroyEffects = true;
-            corpse.Destroy();
-        }
-    }
-}
-
-private void UpdateGroundLootCleanup(int tickCounter)
-{
-    lock (_groundLootCleanupLock)
-    {
-        if (_groundLootCleanupTimers.Count == 0)
-            return;
-
-        foreach (var timer in _groundLootCleanupTimers.Values)
-            timer.Update(tickCounter);
-
-        var expiredIds = _groundLootCleanupTimers
-            .Where(kv => kv.Value.TimedOut)
-            .Select(kv => kv.Key)
-            .ToList();
-
-        foreach (var id in expiredIds)
-            _groundLootCleanupTimers.Remove(id);
-    }
-}
-
-/// <summary>
-			/// Update the flippy animations and remove them once they have timed out
+		/// <summary>
+		/// Update the flippy animations and remove them once they have timed out
 		/// </summary>
 		/// <param name="tickCounter"></param>
 		private void UpdateFlippy(int tickCounter)
@@ -1289,30 +1224,46 @@ private void UpdateGroundLootCleanup(int tickCounter)
 			QuadTree.Remove(scene); // remove from quad-tree too.
 		}
 
-		/// <summary>
-		/// Returns the scene with given dynamicId.
-		/// </summary>
-		/// <param name="dynamicID">The dynamicId of the scene.</param>
-		/// <returns></returns>
-		public Scene GetScene(uint dynamicID)
-		{
-			Scenes.TryGetValue(dynamicID, out var scene);
-			return scene;
-		}
-
-        internal object GetActorByDynamicId(uint actor)
+        /// <summary>
+        /// Returns the scene with given dynamicId.
+        /// </summary>
+        /// <param name="dynamicId">The dynamicId of the scene.</param>
+        /// <returns></returns>
+        public Scene GetScene(uint dynamicId)
         {
-            throw new NotImplementedException();
+            Scenes.TryGetValue(dynamicId, out var scene);
+            return scene;
+        }
+        
+        /// <summary>
+        /// Returns the scene with given dynamicId.
+        /// </summary>
+        /// <param name="dynamicId">The dynamicId of the scene.</param>
+        /// <returns></returns>
+        public bool TryGetScene(uint dynamicId, out Scene scene)
+        {
+            return Scenes.TryGetValue(dynamicId, out scene);
+        }
+
+        internal bool GetActorByDynamicId(uint actorId, out Actor actor)
+        {
+            actor = null;
+			var result = Actors.TryGetValue(actorId, out actor);
+            if (!result)
+            {
+				Logger.Warn($"No actor with {"dynamic ID".Markup().Color(Spectre.Console.Color.OrangeRed1)} ({actorId.Markup().Bold().Color(Spectre.Console.Color.DeepPink2)})");
+            }
+            return result;
         }
 
         /// <summary>
         /// Returns true if world contains a scene with given dynamicId.
         /// </summary>
-        /// <param name="dynamicID">The dynamicId of the scene.</param>
+        /// <param name="dynamicId">The dynamicId of the scene.</param>
         /// <returns><see cref="bool"/></returns>
-        public bool HasScene(uint dynamicID)
+        public bool HasScene(uint dynamicId)
 		{
-			return Scenes.ContainsKey(dynamicID);
+			return Scenes.ContainsKey(dynamicId);
 		}
 
 		/// <summary>
@@ -1507,10 +1458,8 @@ private void UpdateGroundLootCleanup(int tickCounter)
 		{
 			var proximityCircle = new Circle(position.X, position.Y, radius);
 			var actors = QuadTree.Query<Actor>(proximityCircle);
-			foreach (var actor in actors)
-				if (actor.Attributes[GameAttributes.Disabled] == false && actor.Attributes[GameAttributes.Gizmo_Has_Been_Operated] == false && actor.SNO == actorSno) return actor;
-			return null;
-		}
+            return actors.FirstOrDefault(actor => !actor.Attributes[GameAttributes.Disabled] && !actor.Attributes[GameAttributes.Gizmo_Has_Been_Operated] && actor.SNO == actorSno);
+        }
 
 		/// <summary>
 		/// Returns WayPoint with given id.
@@ -1609,15 +1558,12 @@ private void UpdateGroundLootCleanup(int tickCounter)
 				}
 
 				if (s.Subscenes.Count > 0)
-				{
-					foreach (var subScene in s.Subscenes)
-					{
-						if (subScene.Bounds.Contains(location.X, location.Y))
-						{
-							scene = subScene;
-						}
-					}
-				}
+                {
+                    foreach (var subScene in s.Subscenes.Where(subScene => subScene.Bounds.Contains(location.X, location.Y)))
+                    {
+                        scene = subScene;
+                    }
+                }
 
 				int x = (int)((location.X - scene.Bounds.Left) / 2.5f);
 				int y = (int)((location.Y - scene.Bounds.Top) / 2.5f);
@@ -1663,22 +1609,225 @@ private void UpdateGroundLootCleanup(int tickCounter)
 			return $"[World] SNOId: {WorldSNO.Id} GlobalId: {GlobalID} Name: {WorldSNO.Name}";
 		}
 
-		public ImmutableArray<Door> GetAllDoors() =>
-			Actors.Select(a => a.Value).Where(a => a is Door).Cast<Door>().ToImmutableArray();
-		public ImmutableArray<Door> GetAllDoors(ActorSno sno) =>
-			Actors.Select(a => a.Value).Where(a => a is Door && a.SNO == sno).Cast<Door>().ToImmutableArray();
-		public ImmutableArray<Door> OpenAllDoors()
-		{
-			List<Door> openedDoors = new();
-			var doors = GetAllDoors();
-			
-			foreach (var door in doors)
-			{
-				openedDoors.Add(door);
-				door.Open();
-			}
+        /// <summary>
+        /// Gets all doors filtered by optional SNO, position radius, and limit.
+        /// </summary>
+        /// <param name="sno">Optional SNO filter.</param>
+        /// <param name="distanceFrom">Optional position to sort by distance.</param>
+        /// <param name="radius">Optional radius filter around distanceFrom.</param>
+        /// <param name="limit">Optional limit on number of results.</param>
+        /// <returns>Enumerable of doors matching criteria, ordered by distance if distanceFrom provided.</returns>
+        private IEnumerable<Door> GetDoorsFiltered(ActorSno? sno = null, Vector3D distanceFrom = null, float radius = float.MaxValue, int? limit = null)
+        {
+            var doors = Actors.Values
+                .Where(a => a is Door && (sno == null || a.SNO == sno))
+                .Cast<Door>();
 
-			return openedDoors.ToImmutableArray();
-		}
-	}
+            if (distanceFrom != null)
+            {
+                doors = doors.Where(a => a.Position.Around(distanceFrom, radius))
+                    .OrderBy(s => s.Position.Distance(distanceFrom));
+            }
+
+            if (limit.HasValue)
+            {
+                doors = doors.Take(limit.Value);
+            }
+
+            return doors;
+        }
+
+        /// <summary>
+        /// Gets all portals filtered by optional SNO.
+        /// </summary>
+        /// <param name="sno">Optional SNO filter.</param>
+        /// <returns>Immutable array of portals matching criteria.</returns>
+        private ImmutableArray<Portal> GetPortalsFiltered(ActorSno? sno = null)
+        {
+            return Actors.Values
+                .Where(a => a is Portal && (sno == null || a.SNO == sno))
+                .Cast<Portal>()
+                .ToImmutableArray();
+        }
+
+        /// <summary>
+        /// Gets all doors in the world.
+        /// </summary>
+        /// <returns>Immutable array of all doors.</returns>
+        public ImmutableArray<Door> GetAllDoors() =>
+            GetDoorsFiltered().ToImmutableArray();
+
+        /// <summary>
+        /// Gets all doors ordered by distance from a specified point.
+        /// </summary>
+        /// <param name="distanceFrom">Position to measure distance from.</param>
+        /// <returns>Enumerable of doors ordered by ascending distance.</returns>
+        public IEnumerable<Door> GetDoors(Vector3D distanceFrom) =>
+            GetDoorsFiltered(distanceFrom: distanceFrom);
+
+        /// <summary>
+        /// Gets all doors of a specific SNO ordered by distance from a specified point.
+        /// </summary>
+        /// <param name="sno">SNO of doors to retrieve.</param>
+        /// <param name="distanceFrom">Position to measure distance from.</param>
+        /// <returns>Enumerable of doors matching SNO, ordered by ascending distance.</returns>
+        public IEnumerable<Door> GetDoors(ActorSno sno, Vector3D distanceFrom) =>
+            GetDoorsFiltered(sno: sno, distanceFrom: distanceFrom);
+        /// <summary>
+        /// Gets all doors of a specific SNO.
+        /// </summary>
+        /// <param name="sno">SNO of doors to retrieve.</param>
+        /// <returns>Enumerable of doors matching SNO, ordered by ascending distance.</returns>
+        public IEnumerable<Door> GetDoors(ActorSno sno) =>
+            GetDoorsFiltered(sno: sno);
+
+        /// <summary>
+        /// Gets all doors within a specified radius, ordered by distance.
+        /// </summary>
+        /// <param name="distanceFrom">Center position of radius.</param>
+        /// <param name="radius">Radius around the center position.</param>
+        /// <returns>Enumerable of doors within radius, ordered by ascending distance.</returns>
+        public IEnumerable<Door> GetDoors(Vector3D distanceFrom, float radius) =>
+            GetDoorsFiltered(distanceFrom: distanceFrom, radius: radius);
+
+        /// <summary>
+        /// Gets all doors of a specific SNO within a specified radius, ordered by distance.
+        /// </summary>
+        /// <param name="sno">SNO of doors to retrieve.</param>
+        /// <param name="distanceFrom">Center position of radius.</param>
+        /// <param name="radius">Radius around the center position.</param>
+        /// <returns>Enumerable of doors matching SNO within radius, ordered by ascending distance.</returns>
+        public IEnumerable<Door> GetDoors(ActorSno sno, Vector3D distanceFrom, float radius) =>
+            GetDoorsFiltered(sno: sno, distanceFrom: distanceFrom, radius: radius);
+
+        /// <summary>
+        /// Gets up to a specified limit of doors matching SNO criteria within a radius, ordered by distance.
+        /// </summary>
+        /// <param name="sno">SNO of doors to retrieve.</param>
+        /// <param name="distanceFrom">Center position of radius.</param>
+        /// <param name="radius">Radius around the center position.</param>
+        /// <param name="limit">Maximum number of doors to return.</param>
+        /// <returns>Enumerable of doors matching criteria (up to limit), ordered by ascending distance.</returns>
+        public IEnumerable<Door> GetDoors(ActorSno sno, Vector3D distanceFrom, float radius, int limit) =>
+            GetDoorsFiltered(sno: sno, distanceFrom: distanceFrom, radius: radius, limit: limit);
+
+        /// <summary>
+        /// Gets all doors of a specific SNO.
+        /// </summary>
+        /// <param name="sno">SNO of doors to retrieve.</param>
+        /// <returns>Immutable array of all doors matching SNO.</returns>
+        public ImmutableArray<Door> GetAllDoors(ActorSno sno) =>
+            GetDoorsFiltered(sno: sno).ToImmutableArray();
+
+        /// <summary>
+        /// Opens all doors in the world and returns them.
+        /// </summary>
+        /// <returns>Immutable array of opened doors.</returns>
+        public ImmutableArray<Door> OpenAllDoors()
+        {
+            var doors = GetAllDoors();
+            foreach (var door in doors)
+            {
+                door.Open();
+            }
+            return doors;
+        }
+
+        /// <summary>
+        /// Attempts to open all doors matching a specific SNO.
+        /// </summary>
+        /// <param name="actorSno">SNO of doors to open.</param>
+        /// <returns>True if at least one door was opened, false if no doors found.</returns>
+        public bool OpenDoors(ActorSno actorSno)
+        {
+            var doors = GetAllDoors(actorSno);
+            if (doors.Length == 0)
+                return false;
+
+            foreach (var door in doors)
+            {
+                door.SetUsable(true);
+                door.Open();
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Attempts to open the first door matching a specific SNO.
+        /// </summary>
+        /// <param name="actorSno">SNO of door to open.</param>
+        /// <param name="door">Output parameter containing the opened door, or null if not found.</param>
+        /// <returns>True if a door was found and opened, false otherwise.</returns>
+        public bool TryOpenDoor(ActorSno actorSno, out Door door)
+        {
+            door = GetAllDoors(actorSno).FirstOrDefault();
+            if (door == null)
+            {
+                Logger.Warn($"Door {actorSno.GetNameWithValue()} has not been found in world.");
+                return false;
+            }
+            door.SetUsable(true);
+            door.Open();
+            return true;
+        }
+
+        /// <summary>
+        /// Attempts to open the nearest door matching a specific SNO within a radius.
+        /// </summary>
+        /// <param name="actorSno">SNO of door to open.</param>
+        /// <param name="point">Center position for radius search.</param>
+        /// <param name="radius">Search radius around the center point.</param>
+        /// <param name="door">Output parameter containing the opened door, or null if not found.</param>
+        /// <returns>True if a door was found and opened within radius, false otherwise.</returns>
+        public bool TryOpenDoor(ActorSno actorSno, Vector3D point, float radius, out Door door)
+        {
+            door = GetDoors(actorSno, point, radius).FirstOrDefault();
+            if (door == null)
+            {
+                Logger.Warn($"Door {actorSno.GetNameWithValue()} has not been found in world, in {point} (radius {radius}).");
+                return false;
+            }
+            door.SetUsable(true);
+            door.Open();
+            return true;
+        }
+
+        /// <summary>
+        /// Gets all portals in the world.
+        /// </summary>
+        /// <returns>Immutable array of all portals.</returns>
+        public ImmutableArray<Portal> GetAllPortals() =>
+            GetPortalsFiltered();
+
+        /// <summary>
+        /// Gets all portals of a specific SNO.
+        /// </summary>
+        /// <param name="sno">SNO of portals to retrieve.</param>
+        /// <returns>Immutable array of all portals matching SNO.</returns>
+        public ImmutableArray<Portal> GetAllPortals(ActorSno sno) =>
+            GetPortalsFiltered(sno: sno);
+
+        /// <summary>
+        /// Opens all portals in the world and returns them.
+        /// </summary>
+        /// <returns>Immutable array of opened portals.</returns>
+        public ImmutableArray<Portal> OpenAllPortals()
+        {
+            var portals = GetAllPortals();
+            foreach (var portal in portals)
+            {
+                portal.SetUsable(true);
+                portal.SetVisible(true);
+            }
+            return portals;
+        }
+
+        /// <summary>
+        /// Gets all gizmos of a specific SNO.
+        /// </summary>
+        /// <param name="sno">SNO of gizmos to retrieve.</param>
+        /// <returns>Immutable array of all gizmos matching SNO.</returns>
+        public ImmutableArray<Gizmo> GetAllGizmos(ActorSno sno) =>
+            Actors.Select(a => a.Value).Where(a => a is Gizmo && a.SNO == sno).Cast<Gizmo>().ToImmutableArray();
+    }
 }

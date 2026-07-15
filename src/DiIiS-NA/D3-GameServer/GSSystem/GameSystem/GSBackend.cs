@@ -26,7 +26,7 @@ namespace DiIiS_NA.GameServer.GSSystem.GameSystem
 		private bool SenderMessageReceived(byte[] data)
 		{
 			string msg = "";
-			if (data is { Length: > 0 }) msg = Encoding.UTF8.GetString(data);
+			if (data != null && data.Length > 0) msg = Encoding.UTF8.GetString(data);
 			Logger.Debug("Message from Battle.net: {0}", msg);
 
 			var message = msg.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
@@ -74,11 +74,8 @@ namespace DiIiS_NA.GameServer.GSSystem.GameSystem
 			string backEndIp = GameServerConfig.Instance.BindIP;
 			int backEndPort = GameServerConfig.Instance.Port;
 			bool pvp = false;
-			Logger.Info("We are here");
-			if (!pvp){
-				Logger.Info("Ip: {0}|{1}", backEndIp, backEndPort);
+			if (!pvp)
 				RegisterGameServer(backEndIp, backEndPort);
-			}
 			else
 				RegisterPvPGameServer(backEndIp, backEndPort);
 			return true;

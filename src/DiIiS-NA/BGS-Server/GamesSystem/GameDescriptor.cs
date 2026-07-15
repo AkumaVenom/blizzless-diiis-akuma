@@ -46,9 +46,9 @@ namespace DiIiS_NA.LoginServer.GamesSystem
 				{
 					this.GameCreateParams = D3.OnlineService.GameCreateParams.ParseFrom(attribute.Value.BlobValue);
 					if (this.GameCreateParams.CreationFlags == 256 || this.GameCreateParams.CreationFlags == 262400) this.Public = true;
-					lock (owner.Account.GameAccount.CurrentToon.DbToon)
+					lock (owner.Account.GameAccount.CurrentToon.DBToon)
 					{
-						var toonByClient = owner.Account.GameAccount.CurrentToon.DbToon;
+						var toonByClient = owner.Account.GameAccount.CurrentToon.DBToon;
 						toonByClient.CurrentAct = this.GameCreateParams.CampaignOrAdventureMode.Act;
 						toonByClient.CurrentQuestId = (this.GameCreateParams.CampaignOrAdventureMode.SnoQuest == 0 ? 87700 : this.GameCreateParams.CampaignOrAdventureMode.SnoQuest);
 						toonByClient.CurrentQuestStepId = (this.GameCreateParams.CampaignOrAdventureMode.QuestStepId == 0 ? -1 : this.GameCreateParams.CampaignOrAdventureMode.QuestStepId);
@@ -75,7 +75,7 @@ namespace DiIiS_NA.LoginServer.GamesSystem
 		public void StartGame(List<BattleClient> clients, ulong objectId)
 		{
 			Logger.MethodTrace($"objectId: {objectId}");
-			var owner = this.Owner.Account.GameAccount.CurrentToon.DbToon;
+			var owner = this.Owner.Account.GameAccount.CurrentToon.DBToon;
 
 			if (Program.BattleBackend.GameServers.Count == 0) return;
 

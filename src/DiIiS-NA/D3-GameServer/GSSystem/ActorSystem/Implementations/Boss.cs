@@ -4,7 +4,7 @@ using DiIiS_NA.GameServer.GSSystem.AISystem.Brains;
 using DiIiS_NA.GameServer.MessageSystem;
 using DiIiS_NA.Core.Logging;
 using DiIiS_NA.Core.MPQ.FileFormats;
-using DiIiS_NA.D3_GameServer;
+using DiIiS_NA.Utilities;
 
 namespace DiIiS_NA.GameServer.GSSystem.ActorSystem.Implementations
 {
@@ -65,22 +65,41 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem.Implementations
 	public sealed class Boss : Monster
 	{
 		private static readonly Logger Logger = LogManager.CreateLogger(nameof(Boss));
-
+		
 		public Boss(MapSystem.World world, ActorSno sno, TagMap tags)
 			: base(world, sno, tags)
 		{
+			Logger.Trace($"Spawning $[red bold]$Boss$[/]$ monster: $[yellow]${sno.GetName()}$[/]$ in world $[yellow]${world.SNO.GetName()}$[/]$ at position {Position}.");
 			if (sno == ActorSno._zoltunkulle && world.SNO == WorldSno.a2dun_zolt_lobby) SetVisible(false);
 			Attributes[GameAttributes.MinimapActive] = true;
 			//this.Attributes[GameAttribute.Immune_To_Charm] = true;
 			Attributes[GameAttributes.using_Bossbar] = true;
 			Attributes[GameAttributes.InBossEncounter] = true;
-			Attributes[GameAttributes.Hitpoints_Max] *= GameModsConfig.Instance.Boss.HealthMultiplier;
-			Attributes[GameAttributes.Damage_Weapon_Min, 0] *= GameModsConfig.Instance.Boss.DamageMultiplier;
-			Attributes[GameAttributes.Damage_Weapon_Delta, 0] *= GameModsConfig.Instance.Boss.DamageMultiplier;
-			Attributes[GameAttributes.Hitpoints_Cur] = Attributes[GameAttributes.Hitpoints_Max_Total];
-			Attributes[GameAttributes.TeamID] = 10;
 
-			WalkSpeed *= 0.5f;
+			if (BalanceConfig.Instance.BalanceEnabled)
+			{
+				GameBalanceConfig balance = new GameBalanceConfig(sno);
+                Logger.Info($"Applying {sno.FormatWithType()} balance adjustments " +
+					$"$[skyblue1 underline]$(BalanceEnabled)$[/]$.");
+                Attributes[GameAttributes.Hitpoints_Max] *= balance.HitpointMultiplier;
+                Attributes[GameAttributes.Damage_Weapon_Min] *= balance.DamageMultiplier;
+                Attributes[GameAttributes.Damage_Weapon_Delta] *= balance.DamageMultiplier;
+                Attributes[GameAttributes.Hitpoints_Cur] = Attributes[GameAttributes.Hitpoints_Max_Total];
+                if (balance.WalkSpeed >= 0)
+                    WalkSpeed = balance.WalkSpeed;
+                else WalkSpeed *= 0.5f;
+            }
+            else
+			{
+				Logger.Warn($"Using old boss balance for $[orange4_1]${sno.GetName()}$[/]$.");
+				Attributes[GameAttributes.Hitpoints_Max] *= BalanceConfig.Instance.NormalBossHealthMultiplier;
+				Attributes[GameAttributes.Damage_Weapon_Min, 0] *= BalanceConfig.Instance.NormalBossDamageMultiplier;
+				Attributes[GameAttributes.Damage_Weapon_Delta, 0] *= BalanceConfig.Instance.NormalBossDamageMultiplier;
+				Attributes[GameAttributes.Hitpoints_Cur] = Attributes[GameAttributes.Hitpoints_Max_Total];
+
+                WalkSpeed *= 0.5f;
+            }
+			Attributes[GameAttributes.TeamID] = 10;
 			if (Brain is MonsterBrain monsterBrain)
 			{
 				switch (sno)
@@ -90,7 +109,8 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem.Implementations
 						//(Brain as MonsterBrain).AddPresetPower(136189); //[136189] Diablo_ClawRip
 						monsterBrain.AddPresetPower(136223); //Diablo_RingOfFire
 						monsterBrain.AddPresetPower(136226); //Diablo_HellSpikes
-						;
+						monsterBrain.AddPresetPower(136219);
+						monsterBrain.AddPresetPower(214831);
 
 						/*
 							[199476] Diablo_StompAndStun
@@ -168,19 +188,20 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem.Implementations
 						monsterBrain.AddPresetPower(131744); //summon berserker
 						//(Brain as MonsterBrain).AddPresetPower(131745); //mothDust
 						monsterBrain.AddPresetPower(131749); //teleport
-						break;
+                        monsterBrain.AddPresetPower(136223); //Diablo_RingOfFire
+                        break;
 					case ActorSno._gluttony: //Gluttony
 						monsterBrain.AddPresetPower(93676); //gas cloud
 						monsterBrain.AddPresetPower(211292); //slime spawn
 						break;
 					default:
-						Logger.Warn($"Unhandled boss type {sno}");
+						Logger.Warn($"$[orange4_1]$Unhandled boss type:$[/]$ {sno.GetName()}");
 						break;
 				}
 			}
 			else
 			{
-				Logger.Error($"Boss $[underline red]${GetType().Name}$[/]$ ({sno}) has no monster brain!");
+				Logger.Error($"Boss $[underline red]${sno.GetName()}$[/]$ has no monster brain!");
 			}
 		}
 

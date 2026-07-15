@@ -9,7 +9,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem.Actions
 {
 	public class PowerAction : ActorAction
 	{
-		const float DefaultMaxTargetRange = 30f;
+		const float MaxTargetRange = 30f;
 		const float PathUpdateDelay = 1f;
 
 		private Actor _target;
@@ -18,9 +18,8 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem.Actions
 		private TickTimer _powerFinishTimer;
 		private float _baseAttackRadius;
 		private ActorMover _ownerMover;
-		private readonly float _maxTargetRange;
 
-		public PowerAction(Actor owner, int powerSNO, Actor target = null, float? maxTargetRange = null)
+		public PowerAction(Actor owner, int powerSNO, Actor target = null)
 			: base(owner)
 		{
 			_power = PowerLoader.CreateImplementationForPowerSNO(powerSNO);
@@ -30,7 +29,6 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem.Actions
 			_baseAttackRadius = Owner.ActorData.Cylinder.Ax2 + (_power.EvalTag(PowerKeys.AttackRadius) > 0f ? (powerSNO == 30592 ? 10f : _power.EvalTag(PowerKeys.AttackRadius)) : 35f);
 			_ownerMover = new ActorMover(owner);
 			_target = target;
-			_maxTargetRange = maxTargetRange ?? DefaultMaxTargetRange;
 		}
 
 		public override void Start(int tickCounter)
@@ -56,20 +54,20 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem.Actions
 				if (Owner is Minion || Owner is Hireling) // assume minions are player controlled and are targeting monsters
 				{
 					if ((Owner.World.Game.PvP || Owner.World.IsPvP) && (Owner as Minion).Master != null)
-						_target = Owner.GetPlayersInRange(_maxTargetRange)
+						_target = Owner.GetPlayersInRange(MaxTargetRange)
 						   .Where(
 						   p => p.GlobalID != (Owner as Minion).Master.GlobalID)
 						   .OrderBy(
 						   (player) => PowerMath.Distance2D(player.Position, Owner.Position))
 						   .FirstOrDefault();
 					else
-						_target = Owner.GetMonstersInRange(_maxTargetRange).OrderBy(
+						_target = Owner.GetMonstersInRange(MaxTargetRange).OrderBy(
 							(monster) => PowerMath.Distance2D(monster.Position, Owner.Position))
 							.FirstOrDefault();
 				}
 				else  // monsters targeting players
 				{
-					_target = Owner.GetPlayersInRange(_maxTargetRange).OrderBy(
+					_target = Owner.GetPlayersInRange(MaxTargetRange).OrderBy(
 						(player) => PowerMath.Distance2D(player.Position, Owner.Position))
 						.FirstOrDefault();
 				}
@@ -80,7 +78,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem.Actions
 				float targetDistance = PowerMath.Distance2D(_target.Position, Owner.Position);
 
 				// if target has moved out of range, deselect it as the target
-				if (targetDistance > _maxTargetRange)
+				if (targetDistance > MaxTargetRange)
 				{
 					_target = null;
 				}

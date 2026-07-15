@@ -23,21 +23,6 @@ public static class RandomHelper
 		return Random.Next(minValue, maxValue);
 	}
 
-	public static float NextFloat()
-	{
-        return (float)Random.NextDouble();
-    }
-
-	public static float NextFloat(float min, float max)
-	{
-        return min + (float)Random.NextDouble() * (max - min);
-    }
-
-	public static float NextFloat(float max)
-	{
-        return (float)Random.NextDouble() * max;
-    }
-
 	public static void NextBytes(byte[] buffer)
 	{
 		Random.NextBytes(buffer);

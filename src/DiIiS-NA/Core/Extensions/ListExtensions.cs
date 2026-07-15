@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Linq;
 
 namespace DiIiS_NA.Core.Extensions
 {
@@ -7,12 +6,22 @@ namespace DiIiS_NA.Core.Extensions
 	{
 		public static bool ContainsAtLeastOne<T>(this List<T> list1, List<T> list2)
 		{
-			return list2.Any(list1.Contains);
+			foreach (T m in list2)
+			{
+				if (list1.Contains(m))
+					return true;
+			}
+			return false;
 		}
 
 		public static bool ContainsAtLeastOne<T>(this List<T> list, T[] array)
 		{
-			return array.Any(list.Contains);
+			foreach (T m in array)
+			{
+				if (list.Contains(m))
+					return true;
+			}
+			return false;
 		}
 	}
 }

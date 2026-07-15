@@ -5,13 +5,17 @@ using DiIiS_NA.LoginServer.Battle;
 
 namespace DiIiS_NA.GameServer.CommandManager;
 
-[CommandGroup("invulnerable", "Makes you invulnerable", Account.UserLevels.GM, inGameOnly: true)]
+[CommandGroup("invulnerable", "Makes you invulnerable", Account.UserLevels.Tester, inGameOnly: true)]
 public class InvulnerableCommand : CommandGroup
 {
-    [DefaultCommand]
+    [DefaultCommand(Account.UserLevels.Tester, true)]
     public string Invulnerable(string[] @params, BattleClient invokerClient)
     {
         var player = invokerClient.InGameClient.Player;
+        if (player.Attributes.FixedMap.Contains(FixedAttribute.Dev))
+        {
+            return "You have !debug enabled, which overrides invulnerability. Disable it to use this command.";
+        }
 
         if (player.Attributes.FixedMap.Contains(FixedAttribute.Invulnerable))
         {

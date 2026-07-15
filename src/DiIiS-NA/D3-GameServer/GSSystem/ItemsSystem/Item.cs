@@ -240,7 +240,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 
             if (ItemDefinition.Name.ToLower().Contains("norm_season")) Attributes[GameAttributes.Item_Quality_Level] = 9;
 
-            if (ItemDefinition.Name.ToLower().StartsWith("p71_ethereal"))
+            if (ItemDefinition.Name.ToLower().StartsWith("p71_ethereal")) // hack for p71 ethereal items?
             {
                 Attributes[GameAttributes.Item_Quality_Level] = 9;
                 Attributes[GameAttributes.Attacks_Per_Second_Item] += 1.1f;
@@ -317,11 +317,12 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
             //*/
 
 
-#if DEBUG
-#else
-			//if (Attributes[GameAttribute.Item_Quality_Level] > 6)
-			//	this.Unidentified = true;
-#endif
+            //if (Attributes[GameAttribute.Item_Quality_Level] > 6)
+            bool identified = true;
+            identified = Attributes[GameAttributes.Item_Quality_Level] > 6 && FastRandom.Instance.Chance(GameServerConfig.Instance.ChanceHighQualityUnidentified);
+            identified = identified || (Attributes[GameAttributes.Item_Quality_Level] <= 6 && FastRandom.Instance.Chance(GameServerConfig.Instance.ChanceNormalUnidentified));
+            if (!identified)
+                Unidentified = true;
             if (Attributes[GameAttributes.Item_Quality_Level] == 9) Attributes[GameAttributes.MinimapActive] = true;
 
             if (IsArmor(ItemType) || IsWeapon(ItemType) || IsOffhand(ItemType) ||
@@ -677,130 +678,80 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 
         #region Is*
 
-        public static bool IsHealthGlobe(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "HealthGlyph");
-        }
+        public static bool IsHealthGlobe(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "HealthGlyph");
 
-        public static bool IsGold(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Gold");
-        }
+        public static bool IsGold(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Gold");
 
-        public static bool IsBloodShard(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Collectible_DevilsHand");
-        }
+        public static bool IsBloodShard(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Collectible_DevilsHand");
 
-        public static bool IsPotion(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Potion");
-        }
+        public static bool IsPotion(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Potion");
 
-        public static bool IsMetaItem(ItemTypeTable itemType)
-        {
-            return itemType.Name.StartsWith("Generic");
-        }
+        public static bool IsMetaItem(ItemTypeTable itemType) => 
+            itemType.Name.StartsWith("Generic");
 
-        public static bool IsRecipe(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "CraftingPlan");
-        }
+        public static bool IsRecipe(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "CraftingPlan");
 
-        public static bool IsTreasureBag(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "TreasureBag");
-        }
+        public static bool IsTreasureBag(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "TreasureBag");
 
-        public static bool IsAccessory(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Jewelry");
-        }
+        public static bool IsAccessory(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Jewelry");
 
-        public static bool IsJournalOrScroll(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Scroll") || ItemGroup.IsSubType(itemType, "Book");
-        }
+        public static bool IsJournalOrScroll(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Scroll") || ItemGroup.IsSubType(itemType, "Book");
 
-        public static bool IsDye(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Dye");
-        }
+        public static bool IsDye(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Dye");
 
-        public static bool IsGem(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Gem");
-        }
+        public static bool IsGem(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Gem");
 
-        public static bool IsWeapon(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Weapon");
-        }
+        public static bool IsWeapon(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Weapon");
 
-        public static bool IsArmor(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Armor");
-        }
+        public static bool IsArmor(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Armor");
 
-        public static bool IsChestArmor(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "ChestArmor");
-        }
+        public static bool IsChestArmor(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "ChestArmor");
 
-        public static bool IsOffhand(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Offhand");
-        }
+        public static bool IsOffhand(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Offhand");
 
-        public static bool IsShard(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Jewel");
-        }
+        public static bool IsShard(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Jewel");
 
-        public static bool IsBelt(ItemTypeTable itemType)
-        {
-            return itemType.Name.Contains("Belt");
-        }
+        public static bool IsBelt(ItemTypeTable itemType) => 
+            itemType.Name.Contains("Belt");
 
-        public static bool IsHelm(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "Helm");
-        }
+        public static bool IsHelm(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "Helm");
 
-        public static bool IsAmulet(ItemTypeTable itemType)
-        {
-            return itemType.Name.Contains("Amulet");
-        }
+        public static bool IsAmulet(ItemTypeTable itemType) => 
+            itemType.Name.Contains("Amulet");
 
-        public static bool IsHandXbow(ItemTypeTable itemType)
-        {
-            return itemType.Name.Contains("HandXbow");
-        }
+        public static bool IsHandXbow(ItemTypeTable itemType) => 
+            itemType.Name.Contains("HandXbow");
 
-        public static bool IsShield(ItemTypeTable itemType)
-        {
-            return itemType.Name.Contains("Shield");
-        }
+        public static bool IsShield(ItemTypeTable itemType) => 
+            itemType.Name.Contains("Shield");
 
-        public static bool IsRing(ItemTypeTable itemType)
-        {
-            return itemType.Name.Contains("Ring");
-        }
+        public static bool IsRing(ItemTypeTable itemType) => 
+            itemType.Name.Contains("Ring");
 
-        public static bool IsQuiver(ItemTypeTable itemType)
-        {
-            return itemType.Name.Contains("Quiver");
-        }
+        public static bool IsQuiver(ItemTypeTable itemType) => 
+            itemType.Name.Contains("Quiver");
 
-        public static bool IsBow(ItemTypeTable itemType)
-        {
-            return ItemGroup.IsSubType(itemType, "GenericBowWeapon");
-        }
+        public static bool IsBow(ItemTypeTable itemType) => 
+            ItemGroup.IsSubType(itemType, "GenericBowWeapon");
 
-        public static bool Is2H(ItemTypeTable itemType)
-        {
-            return ItemGroup.Is2H(itemType);
-        }
+        public static bool Is2H(ItemTypeTable itemType) => 
+            ItemGroup.Is2H(itemType);
 
         #endregion
 
@@ -830,114 +781,16 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
             EnterWorld(position);
         }
 
-        
-
-
-		
-
-
-		public override void EnterWorld(Vector3D position)
-		{
-			base.EnterWorld(position);
-
-			// Schedule cleanup for ground loot that is never picked up (items + gold).
-			// Only schedule for items with no owner (i.e. sitting on the ground).
-			if (World != null && Owner == null && HasWorldLocation)
-				World.ScheduleGroundLootCleanup(this);
-		}
-
-		public override void Destroy()
-		{
-			// Ensure any scheduled ground-loot cleanup timer is removed.
-			World?.UnregisterGroundLootCleanup(this);
-			base.Destroy();
-		}
-
-
-		public override void OnTargeted(Player player, TargetMessage message)
+        public override void OnTargeted(Player player, TargetMessage message)
         {
-
             player.Inventory.RefreshInventoryToClient();
             var playerAcc = player.InGameClient.BnetClient.Account.GameAccount;
             switch (SNO)
             {
-                case ActorSno._tieredlootrunkey_0: //Greater Rift Key
+                case ActorSno._tieredlootrunkey_0:
                     playerAcc.BigPortalKey++;
                     Destroy();
                     break;
-                case ActorSno._crafting_assortedparts_05: //Reusable Parts
-                    playerAcc.CraftItem1++;
-                    Destroy();
-                    break;
-
-                case ActorSno._crafting_magic_05: //Arcanes Dust
-                    playerAcc.CraftItem2++;
-                    Destroy();
-                    break;
-
-                case ActorSno._crafting_rare_05: //Veiled Crystal
-                    playerAcc.CraftItem3++;
-                    Destroy();
-                    break;
-
-                case ActorSno._crafting_looted_reagent_05: //Death's Breath GBID? 2087837753
-                    playerAcc.CraftItem4++;
-                    Destroy();
-                    break;
-
-                case ActorSno._crafting_legendary_05: //Forgotten Soul
-                    playerAcc.CraftItem5++;
-                    Destroy();
-                    break;
-
-                case ActorSno._craftingreagent_legendary_set_borns_x1: //Khanduran Rune Bounty itens Act I.
-                    playerAcc.HoradricA1Res++;
-                    Destroy();
-                    break;
-
-                case ActorSno._craftingreagent_legendary_set_cains_x1: //Caldeum Nightshade Bounty itens Act II.
-                    playerAcc.HoradricA2Res++;
-                    Destroy();
-                    break;
-
-                case ActorSno._craftingreagent_legendary_set_demon_x1: //Arreat War Tapestry Bounty itens Act III.
-                    playerAcc.HoradricA3Res++;
-                    Destroy();
-                    break;
-
-                case ActorSno._craftingreagent_legendary_set_hallowed_x1: //Corrupted Angel Flesh Bounty itens Act IV.
-                    playerAcc.HoradricA4Res++;
-                    Destroy();
-                    break;
-
-                case ActorSno._craftingreagent_legendary_set_captaincrimsons_x1: //Westmarch Holy Water Bounty itens Act V.
-                    playerAcc.HoradricA5Res++;
-                    Destroy();
-                    break;
-
-                case ActorSno._demonorgan_skeletonking_x1: //Leorik Regret.
-                    playerAcc.LeorikKey++;
-                    Destroy();
-                    break;
-
-                case ActorSno._demonorgan_ghom_x1: //Vial of Putridness.
-                    playerAcc.VialofPutridness++;
-                    Destroy();
-                    break;
-
-                case ActorSno._demonorgan_siegebreaker_x1: //Idol of Terror.
-                    playerAcc.IdolofTerror++;
-                    Destroy();
-                    break;
-
-                case ActorSno._demonorgan_diablo_x1: //Heart of Fright.
-                    playerAcc.HeartofFright++;
-                    Destroy();
-                    break;
-                //case ActorSno._currency_platinum_flippy: //Platinum coin
-                //    playerAcc.Platinum++;
-                //    Destroy();
-                //    break;
                 default:
                     player.Inventory.PickUp(this);
                     break;
@@ -1000,7 +853,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 
             player.InGameClient.SendMessage(
                 new MessageSystem.Message.Definitions.Base.GenericBlobMessage(Opcodes.CurrencyDataFull)
-                { Data = Moneys.Build().ToByteArray() });
+                    { Data = Moneys.Build().ToByteArray() });
         }
 
         public virtual void OnRequestUse(Player player, Item target, int actionId, WorldPlace worldPlace)
@@ -1012,15 +865,17 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 
                 player.World.PowerManager.RunPower(player, 30211);
 
-                /* Potions are no longer consumable
-                if (this.Attributes[GameAttribute.ItemStackQuantityLo] <= 1)
-                    player.Inventory.DestroyInventoryItem(this); // No more potions!
-                else
+                if (GameServerConfig.Instance.HealthPotionConsumable)
                 {
-                    this.UpdateStackCount(--this.Attributes[GameAttribute.ItemStackQuantityLo]); // Just remove one
-                    this.Attributes.SendChangedMessage(player.InGameClient);
+                    if (this.Attributes[GameAttributes.ItemStackQuantityLo] <= 1)
+                        player.Inventory.DestroyInventoryItem(this); // No more potions!
+                    else
+                    {
+                        this.UpdateStackCount(--this.Attributes[GameAttributes.ItemStackQuantityLo]); // Just remove one
+                        this.Attributes.SendChangedMessage(player.InGameClient);
+                    }
                 }
-                */
+
 
                 return;
             }
@@ -1293,7 +1148,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 
                 player.InGameClient.SendMessage(
                     new MessageSystem.Message.Definitions.Base.GenericBlobMessage(Opcodes.CurrencyDataFull)
-                    { Data = moneys.Build().ToByteArray() });
+                        { Data = moneys.Build().ToByteArray() });
 
                 player.Inventory.DestroyInventoryItem(this);
                 return;
@@ -1451,7 +1306,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
             player.Attributes[GameAttributes.Buff_Icon_Count0, powerId] = activated ? 0 : 1;
             player.Attributes.BroadcastChangedIfRevealed();
             player.Inventory.SendVisualInventory(player);
-            var dbToon = player.Toon.DbToon;
+            var dbToon = player.Toon.DBToon;
             dbToon.WingsActive = player.CurrentWingsPowerId;
             player.World.Game.GameDbSession.SessionUpdate(dbToon);
             return;
@@ -1515,7 +1370,7 @@ namespace DiIiS_NA.GameServer.GSSystem.ItemsSystem
 
         public override void OnPlayerApproaching(Player player)
         {
-            if (PowerMath.Distance2D(player.Position, Position) < 3f && !ZPositionCorrected)
+            if (PowerMath.Distance2D(player.Position, Position) < GameServerConfig.Instance.DistanceOnPlayerApproaching && !ZPositionCorrected)
             {
                 foreach (var gplayer in player.World.Game.Players.Values)
                     if (gplayer.GroundItems.ContainsKey(GlobalID) && gplayer != player)

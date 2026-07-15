@@ -1,53 +1,25 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Humanizer.In;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace DiIiS_NA.GameServer
 {
 	public sealed class GameServerConfig : DiIiS_NA.Core.Config.Config
 	{
+        public bool IsLocalDev
+        {
+			get => GetBoolean(nameof(IsLocalDev), false);
+			set => Set(nameof(IsLocalDev), value);
+        }
 		public bool Enabled
 		{
 			get => GetBoolean(nameof(Enabled), true);
 			set => Set(nameof(Enabled), value);
-		}
-
-		public bool HighProcessPriority
-		{
-			get => ParseBoolLoose(GetString(nameof(HighProcessPriority), "true"), true);
-			set => Set(nameof(HighProcessPriority), value);
-		}
-
-		private static bool ParseBoolLoose(string? raw, bool defaultValue)
-		{
-			if (string.IsNullOrWhiteSpace(raw)) return defaultValue;
-			// Support inline comments like: false ; comment
-			var v = raw;
-			var semi = v.IndexOf(';');
-			if (semi >= 0) v = v.Substring(0, semi);
-			var hash = v.IndexOf('#');
-			if (hash >= 0) v = v.Substring(0, hash);
-			v = v.Trim();
-			if (v.Length == 0) return defaultValue;
-			switch (v.ToLowerInvariant())
-			{
-				case "1":
-				case "true":
-				case "yes":
-				case "y":
-				case "on":
-					return true;
-				case "0":
-				case "false":
-				case "no":
-				case "n":
-				case "off":
-					return false;
-				default:
-					return defaultValue;
-			}
 		}
 
 		public string BindIP
@@ -102,13 +74,57 @@ namespace DiIiS_NA.GameServer
 			set => Set(nameof(AfkDisconnect), value);
 		}
 
-		#region Game Mods
+        /// <summary>
+        /// How many tiles away should monsters start chasing players. Default is 40, which is the same as the default for the AggressiveNPCBrain.
+        /// </summary>
+        public float SweepMonstersTiles
+		{
+			get => GetFloat(nameof(SweepMonstersTiles), 40f);
+			set => Set(nameof(SweepMonstersTiles), value);
+        }
 
 		/// <summary>
-		/// Rate of experience gain.
+		/// Default monster think tick per second (defaults to 1 per second to save CPU time)
+		/// 0.5 twice per second, 1 once per second, 2 every two seconds, etc.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
-		public float RateExp
+        public float MonsterThinkTick
+		{
+			get => GetFloat(nameof(MonsterThinkTick), 1);
+			set => Set(nameof(MonsterThinkTick), value);
+		}
+
+
+        public bool DisableMonsterPowerCooldowns
+        {
+            get => GetBoolean(nameof(DisableMonsterPowerCooldowns), false);
+            set => Set(nameof(DisableMonsterPowerCooldowns), value);
+        }
+
+        public float DistanceOnPlayerApproaching
+        {
+            get => GetFloat(nameof(DistanceOnPlayerApproaching), 3f);
+            set => Set(nameof(DistanceOnPlayerApproaching), value);
+        }
+
+		public bool BetrayalCommand
+		{
+			get => GetBoolean(nameof(BetrayalCommand), true);
+			set => Set(nameof(BetrayalCommand), value);
+		}
+
+        public int IdentifyInSeconds 
+		{ 
+			get => GetInt(nameof(IdentifyInSeconds), 5);
+            set => Set(nameof(IdentifyInSeconds), value);
+        }
+
+
+        #region Game Mods
+
+        /// <summary>
+        /// Rate of experience gain.
+        /// </summary>
+        public float RateExp
 		{
 			get => GetFloat(nameof(RateExp), 1);
 			set => Set(nameof(RateExp), value);
@@ -117,7 +133,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Rate of gold gain.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float RateMoney
 		{
 			get => GetFloat(nameof(RateMoney), 1);
@@ -127,14 +142,12 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Rate of item drop.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float RateDrop
 		{
 			get => GetFloat(nameof(RateDrop), 1);
 			set => Set(nameof(RateDrop), value);
 		}
 
-		[Obsolete("Use GameModsConfig instead.")]
 		public float RateChangeDrop
 		{
 			get => GetFloat(nameof(RateChangeDrop), 1);
@@ -144,7 +157,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Rate of monster's HP.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float RateMonsterHP
 		{
 			get => GetFloat(nameof(RateMonsterHP), 1);
@@ -154,17 +166,15 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Rate of monster's damage.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float RateMonsterDMG
 		{
-			get => GetFloat(nameof(RateMonsterDMG), 1);
+			get => GetFloat(nameof(RateMonsterDMG), 1.2f);
 			set => Set(nameof(RateMonsterDMG), value);
 		}
 
 		/// <summary>
 		/// Percentage that a unique, legendary, set or special item created is unidentified
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float ChanceHighQualityUnidentified
 		{
 			get => GetFloat(nameof(ChanceHighQualityUnidentified), 30f);
@@ -174,7 +184,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Percentage that a normal item created is unidentified
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float ChanceNormalUnidentified
 		{
 			get => GetFloat(nameof(ChanceNormalUnidentified), 5f);
@@ -184,7 +193,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Resurrection charges on changing worlds
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public int ResurrectionCharges
 		{
 			get => GetInt(nameof(ResurrectionCharges), 3);
@@ -194,17 +202,15 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Boss Health Multiplier
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float BossHealthMultiplier
 		{
-			get => GetFloat(nameof(BossHealthMultiplier), 6f);
+			get => GetFloat(nameof(BossHealthMultiplier), 3f);
 			set => Set(nameof(BossHealthMultiplier), value);
 		}
 		
 		/// <summary>
 		/// Boss Damage Multiplier
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float BossDamageMultiplier
 		{
 			get => GetFloat(nameof(BossDamageMultiplier), 3f);
@@ -214,7 +220,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Whether to bypass the quest's settings of "Saveable" to TRUE (unless in OpenWorld)
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public bool AutoSaveQuests
 		{
 			get => GetBoolean(nameof(AutoSaveQuests), false);
@@ -224,7 +229,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Progress gained when killing a monster in Nephalem Rifts
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float NephalemRiftProgressMultiplier
 		{
 			get => GetFloat(nameof(NephalemRiftProgressMultiplier), 1f);
@@ -232,10 +236,18 @@ namespace DiIiS_NA.GameServer
 		}
 		
 		/// <summary>
-		///	How much a health potion heals in percentage
+		/// Is the health potion a consumable or via cooldown
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
-		public float HealthPotionRestorePercentage
+		public bool HealthPotionConsumable
+		{
+			get => GetBoolean(nameof(HealthPotionConsumable), true);
+			set => Set(nameof(HealthPotionConsumable), value);
+		}
+
+        /// <summary>
+        ///	How much a health potion heals in percentage
+        /// </summary>
+        public float HealthPotionRestorePercentage
 		{
 			get => GetFloat(nameof(HealthPotionRestorePercentage), 60f);
 			set => Set(nameof(HealthPotionRestorePercentage), value);
@@ -244,7 +256,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Cooldown (in seconds) to use a health potion again.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float HealthPotionCooldown
 		{
 			get => GetFloat(nameof(HealthPotionCooldown), 30f);
@@ -254,7 +265,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Unlocks all waypoints in the campaign.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public bool UnlockAllWaypoints
 		{
 			get => GetBoolean(nameof(UnlockAllWaypoints), false);
@@ -264,7 +274,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Strength multiplier when you're not a paragon.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float StrengthMultiplier
 		{
 			get => GetFloat(nameof(StrengthMultiplier), 1f);
@@ -274,7 +283,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Strength multiplier when you're a paragon.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float StrengthParagonMultiplier
 		{
 			get => GetFloat(nameof(StrengthParagonMultiplier), 1f);
@@ -284,7 +292,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Dexterity multiplier when you're not a paragon.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float DexterityMultiplier
 		{
 			get => GetFloat(nameof(DexterityMultiplier), 1f);
@@ -294,7 +301,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Dexterity multiplier when you're a paragon.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float DexterityParagonMultiplier
 		{
 			get => GetFloat(nameof(DexterityParagonMultiplier), 1f);
@@ -304,7 +310,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Intelligence multiplier when you're not a paragon.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float IntelligenceMultiplier
 		{
 			get => GetFloat(nameof(IntelligenceMultiplier), 1f);
@@ -314,7 +319,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Intelligence multiplier when you're a paragon.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float IntelligenceParagonMultiplier
 		{
 			get => GetFloat(nameof(IntelligenceParagonMultiplier), 1f);
@@ -324,7 +328,6 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Vitality multiplier when you're not a paragon.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float VitalityMultiplier
 		{
 			get => GetFloat(nameof(VitalityMultiplier), 1f);
@@ -334,18 +337,55 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// Vitality multiplier when you're a paragon.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public float VitalityParagonMultiplier
 		{
 			get => GetFloat(nameof(VitalityParagonMultiplier), 1f);
 			set => Set(nameof(VitalityParagonMultiplier), value);
 		}
-		
+
+        /// <summary>
+        /// Automatically passes bugged quests that can't be completed due to missing quest items or other reasons. Only applies to quests that are not in OpenWorld.
+        /// </summary>
+        public bool BypassBuggedQuests
+        {
+			get => GetBoolean(nameof(BypassBuggedQuests), false);
+			set => Set(nameof(BypassBuggedQuests), value);
+        }
+
+        /// <summary>
+        /// Logs in chat if there's a quest advance, with the format defined in <see cref="LogQuestAdvanceFormat"></see>.
+        /// </summary>
+        public bool LogQuestAdvance
+        {
+            get => GetBoolean(nameof(LogQuestAdvance), false);
+            set => Set(nameof(LogQuestAdvance), value);
+        }
+
 		/// <summary>
-		/// Auto finishes nephalem rift when there's <see cref="NephalemRiftAutoFinishThreshold"></see> or less monsters left.
+		/// Gets or sets the format string used for logging quest advancement events.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
-		public bool NephalemRiftAutoFinish
+		/// <remarks>The format string can include placeholders such as {act}, {quest}, and {step}, which will be
+		/// replaced with the corresponding values when logging quest progress. The default format is "Advancing to Act {act}
+		/// Quest {quest} Step {step}".</remarks>
+        public string LogQuestAdvanceFormat
+        {
+            get => GetString(nameof(LogQuestAdvanceFormat), "Advancing to Act {act} Quest {quest} Step {step}");
+            set => Set(nameof(LogQuestAdvanceFormat), value.Trim());
+        }
+
+        /// <summary>
+        /// Not used yet, but if enabled, it would show more arrows on the minimap for quests that require you to go to a specific location. This is useful for quests that have a very small arrow or no arrow at all, like the "Find the Wailing Host" quest in Act 2.
+        /// </summary>
+        public bool DebugMoreArrowsInQuests
+        {
+			get => GetBoolean(nameof(DebugMoreArrowsInQuests), false);
+			set => Set(nameof(DebugMoreArrowsInQuests), value);
+        }
+
+        /// <summary>
+         /// Auto finishes nephalem rift when there's <see cref="NephalemRiftAutoFinishThreshold"></see> or less monsters left.
+         /// </summary>
+        public bool NephalemRiftAutoFinish
 		{
 			get => GetBoolean(nameof(NephalemRiftAutoFinish), false);
 			set => Set(nameof(NephalemRiftAutoFinish), value);
@@ -354,49 +394,36 @@ namespace DiIiS_NA.GameServer
 		/// <summary>
 		/// If <see cref="NephalemRiftAutoFinish"></see> is enabled, this is the threshold.
 		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
 		public int NephalemRiftAutoFinishThreshold
 		{
 			get => GetInt(nameof(NephalemRiftAutoFinishThreshold), 2);
 			set => Set(nameof(NephalemRiftAutoFinishThreshold), value);
 		}
-		
-		/// <summary>
-		/// Nephalem Rifts chance of spawning a orb.
-		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
-		public float NephalemRiftOrbsChance
+
+        /// <summary>
+        /// Nephalem Rifts chance of spawning a orb.
+        /// If greater than zero, it will spawn a progress orb on the map when a monster is killed in a Nephalem Rift, with the chance defined by this setting. This is useful for testing and debugging, as it allows you to see how many progress orbs are spawned and how much progress they give. It also makes it easier to test the Nephalem Rift mechanics without having to kill a large number of monsters.
+		/// X% chance to spawn an orb on monster kill in Nephalem Rifts. Default is 0 (disabled).
+        /// </summary>
+        public float NephalemRiftOrbsChance
 		{
 			get => GetFloat(nameof(NephalemRiftOrbsChance), 0f);
 			set => Set(nameof(NephalemRiftOrbsChance), value);
 		}
 
-		/// <summary>
-		/// Forces the game to reveal all the map.
-		/// </summary>
-		[Obsolete("Use GameModsConfig instead.")]
-		public bool ForceMinimapVisibility
+        /// <summary>
+        /// Forces the game to reveal all the map.
+        /// For quests that require you to go to a specific location, it would show an arrow on the minimap pointing to the location, even if it's in a different area. This is useful for quests that have a very small arrow or no arrow at all, like the "Find the Wailing Host" quest in Act 2. It also reveals the location of all monsters and interactable objects on the minimap, which is useful for testing and debugging.
+        /// </summary>
+        public bool ForceMinimapVisibility
 		{
 			get => GetBoolean(nameof(ForceMinimapVisibility), false);
 			set => Set(nameof(ForceMinimapVisibility), value);
 		}
 
-
-		/// <summary>
-		/// Enables the custom Necromancer "Blood Build" behavior (Siphon Blood multi-target + execution explosions).
-		/// When disabled, Siphon Blood retains retail behavior.
-		/// </summary>
-		public bool NecromancerBloodBuildSeason3Enabled
-		{
-			get => GetBoolean(nameof(NecromancerBloodBuildSeason3Enabled), false);
-			set => Set(nameof(NecromancerBloodBuildSeason3Enabled), value);
-		}
-
-		#endregion
-
-		public static GameServerConfig Instance { get; } = new();
-
-		private GameServerConfig() : base("Game-Server")
+        #endregion
+        public static GameServerConfig Instance { get; } = new();
+        private GameServerConfig() : base("Game-Server")
 		{
 		}
 	}

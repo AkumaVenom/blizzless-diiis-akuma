@@ -27,7 +27,9 @@ using DiIiS_NA.Core.MPQ;
 using DiIiS_NA.Core.MPQ.FileFormats;
 using DiIiS_NA.D3_GameServer.GSSystem.GameSystem;
 using DiIiS_NA.LoginServer.Battle;
+using DiIiS_NA.Utilities;
 using Circle = DiIiS_NA.GameServer.Core.Types.Misc.Circle;
+using Color = Spectre.Console.Color;
 using Player = DiIiS_NA.GameServer.GSSystem.PlayerSystem.Player;
 using Scene = DiIiS_NA.GameServer.GSSystem.MapSystem.Scene;
 using World = DiIiS_NA.GameServer.GSSystem.MapSystem.World;
@@ -57,7 +59,19 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem
 
 		public bool Disable = false;
 
-		public bool Spawner = false;
+		public bool ShouldStopTickAction => IsFrozen ||
+				IsStunned ||
+				IsBlind ||
+				IsWebbed ||
+				Disable;
+
+		public bool IsStunned => Attributes[GameAttributes.Stunned];
+		public bool IsFrozen => Attributes[GameAttributes.Frozen];
+		public bool IsBlind => Attributes[GameAttributes.Blind];
+		public bool IsWebbed => Attributes[GameAttributes.Webbed];
+
+
+        public bool Spawner = false;
 
 		/// <summary>
 		/// The actor type.
@@ -214,8 +228,10 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem
 		public int OriginalLevelArea = -1;
 		
 		public int? MarkerSetIndex { get; private set; }
+		public bool IsFeared => Attributes[GameAttributes.Feared];
+		
 
-		private int _snoTriggeredConversation = -1;
+        private int _snoTriggeredConversation = -1;
 
 		/// <summary>
 		/// Creates a new actor.
@@ -294,14 +310,13 @@ namespace DiIiS_NA.GameServer.GSSystem.ActorSystem
 		public override void Destroy()
 		{
 			if (_isDestroyed) return;
-			var necroCorpse = this as ActorSystem.Implementations.NecromancerFlesh;
-				if (SNO == ActorSno._p6_necro_corpse_flesh && (necroCorpse == null || !necroCorpse.SuppressOnDestroyEffects))
-					if (World != null)
-						foreach (var plr in World.Game.Players.Values)
-							if (plr.SkillSet.HasPassive(208594) && DiIiS_NA.Core.Helpers.Math.RandomHelper.Next(0,100) > 45)
-								World.SpawnHealthGlobe(this, plr, Position);
+			if (SNO == ActorSno._p6_necro_corpse_flesh)
+				if (World != null)
+					foreach (var plr in World.Game.Players.Values)
+						if (plr.SkillSet.HasPassive(208594) && DiIiS_NA.Core.Helpers.Math.RandomHelper.Next(0,100) > 45)
+							World.SpawnHealthGlobe(this, plr, Position);
 
-if (_questRange != null)
+			if (_questRange != null)
 				if (World == null)
 					Logger.Debug("World is null? {0}", GetType());
 				else if (World.Game == null)
@@ -1057,11 +1072,11 @@ if (_questRange != null)
 			}
 		}
 
-		/// <summary>
-		/// Unreveals an actor from a player.
-		/// </summary>
-		/// <returns>true if the actor was unrevealed or false if the actor wasn't already revealed.</returns>
-		public override bool Unreveal(Player player)
+        /// <summary>
+        /// Unreveals an actor from a player.
+        /// </summary>
+        /// <returns>true if the actor was unrevealed or false if the actor wasn't already revealed.</returns>
+        public override bool Unreveal(Player player)
 		{
 			lock (player.RevealedObjects)
 			{
@@ -1332,7 +1347,25 @@ if (_questRange != null)
 				aniTag = AnimationSet.GetAnimationTag(DiIiS_NA.Core.MPQ.FileFormats.AnimationTags.Run);
 			else
 				aniTag = -1;
-			World?.BroadcastIfRevealed(plr => new ACDTranslateNormalMessage
+
+            if (this is Player { IsTeleportActive: true })
+            {
+                Teleport(point);
+                SetFacingRotation(facingAngle);
+                World?.BroadcastIfRevealed(plr => new ACDTranslateNormalMessage
+                {
+                    ActorId = DynamicID(plr),
+                    Position = point,
+                    Angle = facingAngle,
+                    SnapFacing = false,
+                    MovementSpeed = 100,
+                    MoveFlags = 0,
+                    AnimationTag = aniTag
+                }, this);
+                return;
+            }
+
+            World?.BroadcastIfRevealed(plr => new ACDTranslateNormalMessage
 			{
 				ActorId = DynamicID(plr),
 				Position = point,

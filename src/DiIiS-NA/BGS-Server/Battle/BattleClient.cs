@@ -16,11 +16,11 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Json;
 using System.Net.Security;
 using System.Threading.Tasks;
 using DiIiS_NA.GameServer.MessageSystem.Message.Definitions.Text;
+using DiIiS_NA.Utilities;
+using Spectre.Console;
 
 namespace DiIiS_NA.LoginServer.Battle
 {
@@ -88,9 +88,10 @@ namespace DiIiS_NA.LoginServer.Battle
 
 		
 		public void SendServerWhisper(string text)
-		{
-			if (text.Trim() == string.Empty) return;
-
+        {
+            text = text.Trim();
+            if (string.IsNullOrWhiteSpace(text)) return;
+            Logger.MethodTrace($"Sending whisper with length of {text.Length} to player.");
 			var notification = bgs.protocol.notification.v1.Notification.CreateBuilder()
 				.SetTargetId(Account.GameAccount.BnetEntityId)
 				.SetType("WHISPER")
@@ -107,8 +108,11 @@ namespace DiIiS_NA.LoginServer.Battle
 		}
 
 		public void SendServerMessage(string text)
-		{
-			InGameClient.SendMessage(new BroadcastTextMessage()
+        {
+            text = text.Trim();
+            if (string.IsNullOrWhiteSpace(text)) return;
+            Logger.MethodTrace($"Sending message with length of {text.Length} to player.");
+            InGameClient.SendMessage(new BroadcastTextMessage()
 			{
 				Field0 = text
 			});
@@ -119,11 +123,14 @@ namespace DiIiS_NA.LoginServer.Battle
 			List<Channel> channels = Channels.Values.ToList();
 			foreach (var channel in channels)
 			{
-				try
-				{
-					channel.RemoveMember(this, Channel.RemoveReason.Left);
-				}
-				catch { }
+                try
+                {
+                    channel.RemoveMember(this, Channel.RemoveReason.Left);
+                }
+                catch(Exception ex)
+                {
+					Logger.Trace($"{"Error".Markup().Color(Color.White).Background(Color.IndianRed1_1)} trying to remove {"channel".Markup().Color(Color.CadetBlue_1)} from {"member".Markup().Color(Color.BlueViolet)}");
+                }
 			}
 			Channels.Clear();
 		}
@@ -136,7 +143,7 @@ namespace DiIiS_NA.LoginServer.Battle
 			Services = new Dictionary<uint, uint>();
 			MappedObjects = new ConcurrentDictionary<ulong, ulong>();
 			if (SocketConnection.Active)
-				Logger.Trace("Client - $[green]$ {0} $[/]$ - successfully encrypted the connection", socketChannel.RemoteAddress);
+				Logger.Trace($"Client - {socketChannel.RemoteAddress} - successfully encrypted the connection");
 		}
 
 		protected override void ChannelRead0(IChannelHandlerContext ctx, BNetPacket msg)
@@ -503,41 +510,13 @@ namespace DiIiS_NA.LoginServer.Battle
 		}
 		public void SendMotd()
 		{
-			if (LoginServerConfig.Instance.MotdEnabled)
-			{
-				if (LoginServerConfig.Instance.MotdEnabledRemote)
-				{
-					if (string.IsNullOrWhiteSpace(LoginServerConfig.Instance.MotdRemoteUrl))
-					{
-						Logger.Warn("No Motd remote URL defined, falling back to normal motd.");
-					}
-					else
-					{
-						var url = LoginServerConfig.Instance.MotdRemoteUrl.Trim();
-						HttpClient client = new();
-						var post = client.PostAsJsonAsync(url, new
-						{
-							GameAccountId = InGameClient.Player?.Toon?.GameAccountId ?? 0,
-							ToonName = InGameClient.Player?.Toon?.Name ?? string.Empty,
-							WorldGlobalId = InGameClient.Player?.World?.GlobalID ?? 0
-						}).Result;
-						if (post.IsSuccessStatusCode)
-						{
-							var text = post.Content.ReadAsStringAsync().Result;
-							SendServerWhisper(text);
-							Logger.Info("Remote Motd sent successfully.");
-							return;
-						}
-
-						Logger.Warn("Could not POST to $[red]$" + url + "$[/]$. Please ensure the URL is correct. Falling back to normal MotD if available.");
-					}
-				}
-				if (!string.IsNullOrWhiteSpace(LoginServerConfig.Instance.Motd))
-				{
-					Logger.Debug($"Motd sent to {Account.BattleTag}.");
-					SendServerWhisper(LoginServerConfig.Instance.Motd);
-				}
-			}
+			if (string.IsNullOrWhiteSpace(LoginServerConfig.Instance.Motd) || !LoginServerConfig.Instance.MotdEnabled)
+				return;
+			Logger.Debug($"Motd sent to {Account.BattleTag}.");
+			SendServerWhisper(LoginServerConfig.Instance.Motd
+                .Replace("{act}", InGameClient.Game.GetCurrentActName(true))
+                .Replace("{quest}", InGameClient.Game.GetCurrentQuestName(true))
+            );
 		}
 
         public override void ChannelInactive(IChannelHandlerContext context)
@@ -548,7 +527,7 @@ namespace DiIiS_NA.LoginServer.Battle
 
 		private void DisconnectClient()
 		{
-			if (Account != null && Account.GameAccount != null) Account.GameAccount.LoggedInClient = null;
+			if (Account is { GameAccount: not null }) Account.GameAccount.LoggedInClient = null;
 			PlayerManager.PlayerDisconnected(this);
 		}
 	}

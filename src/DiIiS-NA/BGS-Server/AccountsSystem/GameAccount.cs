@@ -90,8 +90,8 @@ public class GameAccount : PersistentRPCObject
 
     public EntityId LastPlayedHeroId =>
         CurrentToon == null
-            ? Toons.Count > 0 ? Toons.First().D3EntityId : AccountHasNoToons
-            : CurrentToon.D3EntityId;
+            ? Toons.Count > 0 ? Toons.First().D3EntityID : AccountHasNoToons
+            : CurrentToon.D3EntityID;
 
     public ByteStringPresenceField<bgs.protocol.channel.v1.ChannelId> PartyIdField =>
         new(FieldKeyHelper.Program.D3, FieldKeyHelper.OriginatingClass.Party, 1, 0)
@@ -271,7 +271,7 @@ public class GameAccount : PersistentRPCObject
             _currentToonId = value.PersistentID;
             lock (DBGameAccount)
             {
-                SetField(x=>x.LastPlayedHero = value.DbToon);
+                SetField(x=>x.LastPlayedHero = value.DBToon);
             }
 
             ChangedFields.SetPresenceFieldValue(LastPlayedHeroIdField);
@@ -924,9 +924,9 @@ public class GameAccount : PersistentRPCObject
             foreach (var hero in Toons)
                 profile.AddHeroes(HeroMiniProfile.CreateBuilder()
                     .SetHeroName(hero.Name)
-                    .SetHeroGbidClass((int)hero.ClassId)
+                    .SetHeroGbidClass((int)hero.ClassID)
                     .SetHeroFlags((uint)hero.Flags)
-                    .SetHeroId((uint)hero.D3EntityId.IdLow)
+                    .SetHeroId((uint)hero.D3EntityID.IdLow)
                     .SetHeroLevel(hero.Level)
                     .SetHeroVisualEquipment(hero.HeroVisualEquipmentField.Value)
                 );
@@ -1423,7 +1423,7 @@ public class GameAccount : PersistentRPCObject
                 }
                 else if (queryKey.Group == 3 && queryKey.Field == 1) // Hero's class (GbidClass)
                 {
-                    field.SetValue(bgs.protocol.Variant.CreateBuilder().SetIntValue(CurrentToon.ClassId).Build());
+                    field.SetValue(bgs.protocol.Variant.CreateBuilder().SetIntValue(CurrentToon.ClassID).Build());
                 }
                 else if (queryKey.Group == 3 && queryKey.Field == 2) // Hero's current level
                 {
