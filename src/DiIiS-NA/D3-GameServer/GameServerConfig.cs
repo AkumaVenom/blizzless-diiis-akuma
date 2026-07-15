@@ -122,6 +122,16 @@ namespace DiIiS_NA.GameServer
         #region Game Mods
 
         /// <summary>
+        /// Enables the Diablo IV-inspired Necromancer blood build additions for
+        /// Siphon Blood and Death Nova. Disabled by default for compatibility.
+        /// </summary>
+        public bool NecromancerBloodBuildEnabled
+        {
+            get => GetBoolean(nameof(NecromancerBloodBuildEnabled), false);
+            set => Set(nameof(NecromancerBloodBuildEnabled), value);
+        }
+
+        /// <summary>
         /// Rate of experience gain.
         /// </summary>
         public float RateExp

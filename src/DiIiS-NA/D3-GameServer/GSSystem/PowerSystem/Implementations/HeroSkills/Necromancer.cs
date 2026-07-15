@@ -464,8 +464,17 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
     public class SiphonBlood : ChanneledSkill
     {
         const float MaxBeamLength = 40f;
+        private const float SiphonClusterRadius = 10f;
+        private const int MaxSiphonTargetsPerTick = 5;
+        private const int HemorrhageBloodSplashEffectGroup = 465050;
+        private const int HemorrhageExplosionEffectGroup = 457183;
+        private const float BeamProxyLifetimeSeconds = 0.6f;
+        private const float HemorrhageRadius = 7f;
+        private const float HemorrhageDamageMultiplier = 0.75f;
+        private const int MaxHemorrhageTargetsPerExplosion = 4;
+        private const int MaxHemorrhageChainTargetsPerTick = 20;
         private Actor _beamEnd;
-        private Actor Effect;
+        private readonly List<Actor> _activeBeamEffects = new List<Actor>(MaxSiphonTargetsPerTick);
         private Vector3D _calcBeamEnd(float length)
         {
             return PowerMath.TranslateDirection2D(User.Position, TargetPosition,
@@ -476,21 +485,29 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
         public override void OnChannelOpen()
         {
             EffectsPerSecond = 0.5f;
+            DestroyBeamEffects();
+            if (_beamEnd?.World != null)
+                _beamEnd.Destroy();
 
-            {
-                _beamEnd = SpawnEffect(ActorSno._p6_necro_siphonblood_a_target_attractchunks, User.Position, 0, WaitInfinite());
-
-            }
+            _beamEnd = SpawnEffect(ActorSno._p6_necro_siphonblood_a_target_attractchunks, User.Position, 0, WaitInfinite());
         }
 
-        private bool _channelClosed;
         public override void OnChannelClose()
         {
-            if (_channelClosed)
-                return; 
-            _beamEnd?.Destroy();
-            Effect?.Destroy();
-            _channelClosed = true;
+            DestroyBeamEffects();
+            if (_beamEnd?.World != null)
+                _beamEnd.Destroy();
+            _beamEnd = null;
+        }
+
+        private void DestroyBeamEffects()
+        {
+            foreach (var beamEffect in _activeBeamEffects)
+            {
+                if (beamEffect?.World != null)
+                    beamEffect.Destroy();
+            }
+            _activeBeamEffects.Clear();
         }
 
         public override void OnChannelUpdated()
@@ -501,26 +518,42 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
         public override IEnumerable<TickTimer> Main()
         {
             var PowerData = (DiIiS_NA.Core.MPQ.FileFormats.Power)MPQStorage.Data.Assets[SNOGroup.Power][PowerSNO].Data;
+            bool bloodBuildEnabled = GameServerConfig.Instance.NecromancerBloodBuildEnabled;
+            DestroyBeamEffects();
+            var hemorrhageCenters = bloodBuildEnabled ? new List<Actor>(MaxSiphonTargetsPerTick) : null;
+            bool primarySiphonBenefitsGranted = false;
             AttackPayload attack = new AttackPayload(this);
             {
-                attack.Targets ??= new TargetList();
-                attack.Targets.Actors ??= new List<Actor>();
-                if (Target != null)
-                    attack.Targets.Actors.Add(Target);
+                attack.Targets = GetSiphonTargets(bloodBuildEnabled);
                 DamageType DType = DamageType.Physical;
                 if (Rune_A > 0) DType = DamageType.Cold;
                 else if (Rune_D > 0) DType = DamageType.Poison;
                 attack.AddWeaponDamage(3f, DType);
                 attack.OnHit = hit =>
                 {
-                    Effect = SpawnProxy(hit.Target.Position);
-                    Effect.AddComplexEffect(RuneSelect(467461, 467557, 467500, 467643, 469460, 469275), _beamEnd);
-                    //Effect.AddComplexEffect(baseEffectSkill, _beamEnd); 
-                    AddBuff(hit.Target, new DebuffChilled(0.3f, WaitSeconds(0.5f)));
-                    ((Player) User).AddPercentageHP(2);
-                    if (Rune_C < 1)
-                        GeneratePrimaryResource(15f);
+                    // Keep every beam on a tracked, short-lived proxy. This preserves the original
+                    // Siphon visual while guaranteeing that all beams stop when the channel closes.
+                    var beamEffect = SpawnProxy(hit.Target.Position, WaitSeconds(BeamProxyLifetimeSeconds));
+                    beamEffect.AddComplexEffect(RuneSelect(467461, 467557, 467500, 467643, 469460, 469275), _beamEnd);
+                    _activeBeamEffects.Add(beamEffect);
 
+                    AddBuff(hit.Target, new DebuffChilled(0.3f, WaitSeconds(0.5f)));
+
+                    // Keep the original life and essence gain once per channel tick rather than multiplying it by five targets.
+                    if (!primarySiphonBenefitsGranted)
+                    {
+                        ((Player) User).AddPercentageHP(2);
+                        if (Rune_C < 1)
+                            GeneratePrimaryResource(15f);
+                        primarySiphonBenefitsGranted = true;
+                    }
+
+                    if (bloodBuildEnabled &&
+                        hemorrhageCenters.Count < MaxSiphonTargetsPerTick &&
+                        hemorrhageCenters.All(actor => actor.GlobalID != hit.Target.GlobalID))
+                    {
+                        hemorrhageCenters.Add(hit.Target);
+                    }
                 };
 
                 if (Rune_E > 0)//Bloodsucker
@@ -551,8 +584,100 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
                 }
             }
             attack.Apply();
+
+            if (bloodBuildEnabled && hemorrhageCenters.Count > 0)
+                TriggerHemorrhageExplosions(hemorrhageCenters);
+
             yield break;
         }
+
+        private TargetList GetSiphonTargets(bool bloodBuildEnabled)
+        {
+            var siphonTargets = new TargetList();
+            if (Target == null || Target.World == null ||
+                PowerMath.Distance2D(User.Position, Target.Position) > MaxBeamLength)
+                return siphonTargets;
+
+            siphonTargets.Actors.Add(Target);
+            if (!bloodBuildEnabled)
+                return siphonTargets;
+
+            var nearbyTargets = GetEnemiesInRadius(Target.Position, SiphonClusterRadius);
+            nearbyTargets.SortByDistanceFrom(Target.Position);
+
+            foreach (var target in nearbyTargets.Actors)
+            {
+                if (siphonTargets.Actors.Count >= MaxSiphonTargetsPerTick)
+                    break;
+                if (target == null || target.World == null || target.GlobalID == Target.GlobalID)
+                    continue;
+                if (PowerMath.Distance2D(User.Position, target.Position) > MaxBeamLength)
+                    continue;
+
+                siphonTargets.Actors.Add(target);
+            }
+
+            return siphonTargets;
+        }
+
+        private void TriggerHemorrhageExplosions(IReadOnlyCollection<Actor> centers)
+        {
+            var chainTargets = new TargetList();
+            var centerIds = new HashSet<uint>(centers.Where(center => center != null).Select(center => center.GlobalID));
+            var selectedTargetIds = new HashSet<uint>();
+
+            foreach (var center in centers)
+            {
+                if (center?.World == null)
+                    continue;
+
+                // The blood splash is immediate. The corpse-explosion effect is hosted on a
+                // 0.2-second actor, so both its visual and built-in impact audio terminate naturally.
+                center.PlayEffectGroup(HemorrhageBloodSplashEffectGroup);
+                var explosion = SpawnEffect(
+                    ActorSno._p6_necro_corpseexplosion_projectile_spawn,
+                    center.Position,
+                    0,
+                    WaitSeconds(0.2f)
+                );
+                explosion.PlayEffect(Effect.PlayEffectGroup, HemorrhageExplosionEffectGroup);
+
+                var nearbyTargets = GetEnemiesInRadius(center.Position, HemorrhageRadius);
+                nearbyTargets.SortByDistanceFrom(center.Position);
+
+                int addedForCenter = 0;
+                foreach (var target in nearbyTargets.Actors)
+                {
+                    if (target == null || target.World == null || centerIds.Contains(target.GlobalID))
+                        continue;
+                    if (!selectedTargetIds.Add(target.GlobalID))
+                        continue;
+
+                    chainTargets.Actors.Add(target);
+                    addedForCenter++;
+
+                    if (addedForCenter >= MaxHemorrhageTargetsPerExplosion ||
+                        chainTargets.Actors.Count >= MaxHemorrhageChainTargetsPerTick)
+                        break;
+                }
+
+                if (chainTargets.Actors.Count >= MaxHemorrhageChainTargetsPerTick)
+                    break;
+            }
+
+            if (chainTargets.Actors.Count == 0)
+                return;
+
+            // Batch all unique splash victims into one payload to keep the five simultaneous explosions inexpensive.
+            var hemorrhageAttack = new AttackPayload(this)
+            {
+                Targets = chainTargets,
+                AutomaticHitEffects = false
+            };
+            hemorrhageAttack.AddWeaponDamage(HemorrhageDamageMultiplier, DamageType.Physical);
+            hemorrhageAttack.Apply();
+        }
+
         [ImplementsPowerBuff(6, true)]
         public class BustBuff : PowerBuff
         {
@@ -1147,6 +1272,13 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
     [ImplementsPowerSNO(SkillsSystem.Skills.Necromancer.SecondrySkills.DeathNova)]
     public class DeathNova : Skill
     {
+        private const int BloodNovaEffectGroup = 462662;
+        private const int BloodNovaSplashEffectGroup = 465050;
+        private const float BloodNovaChainRadius = 9f;
+        private const float BloodNovaChainDamageMultiplier = 0.75f;
+        private const int MaxBloodNovaChainTargetsPerCast = 5;
+        private const float BloodNovaHitEffectLifetimeSeconds = 1.25f;
+
         #region Content
         /*
             [467107] [Actor] p6_necro_bloodNova_B_boneNova
@@ -1188,15 +1320,18 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
         #endregion
         public override IEnumerable<TickTimer> Main()
         {
-
             UsePrimaryResource(EvalTag(PowerKeys.ResourceCost));
-            //462392
-            //var Point = SpawnEffect(462194, TargetPosition, 0, WaitSeconds(0.2f));
-            //Point.PlayEffect(Effect.PlayEffectGroup, 459954);
+
+            bool bloodBuildEnabled = GameServerConfig.Instance.NecromancerBloodBuildEnabled;
             float Radius = 25f;
             float Dmg = 3.5f;
             DamageType DType = DamageType.Poison;
-            User.PlayEffectGroup(RuneSelect(474458, 474459, 474460, 474461, 474462, 474463));
+
+            // In normal mode, retain every original cast and rune visual. Blood-build mode
+            // replaces only those airborne-looking Nova visuals with a player-origin blood wave.
+            if (!bloodBuildEnabled)
+                User.PlayEffectGroup(RuneSelect(474458, 474459, 474460, 474461, 474462, 474463));
+
             int boomEffect = 474290;
             if (Rune_E > 0)
                 switch (((Player) User).SpecialComboIndex)
@@ -1217,6 +1352,7 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
                         break;
                 }
             else ((Player) User).SpecialComboIndex = 0;
+
             if (Rune_A > 0)
             {
                 Dmg = 2.25f;
@@ -1247,10 +1383,23 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
                     AddBuff(act, new DebuffChilled(0.60f, WaitSeconds(1f)));
                 }
             }
-            User.PlayEffectGroup(boomEffect);
+
+            if (bloodBuildEnabled)
+            {
+                // Use the real Blood Nova rune blast rather than spawning the raw wave actor.
+                // This effect originates on the player and includes its native one-shot nova audio.
+                User.PlayEffectGroup(BloodNovaEffectGroup);
+            }
+            else
+                User.PlayEffectGroup(boomEffect);
+
+            var novaTargets = GetEnemiesInRadius(User.Position, Radius);
+            novaTargets.SortByDistanceFrom(User.Position);
+            Actor chainOrigin = novaTargets.Actors.FirstOrDefault();
+
             AttackPayload attack = new AttackPayload(this)
             {
-                Targets = GetEnemiesInRadius(User.Position, Radius)
+                Targets = novaTargets
             };
             attack.AddWeaponDamage(Dmg, DType);
             attack.OnHit = hit =>
@@ -1258,9 +1407,85 @@ namespace DiIiS_NA.GameServer.GSSystem.PowerSystem.Implementations
                 if (Rune_A > 0)
                     ((Player) User).AddPercentageHP(1);
             };
-
             attack.Apply();
+
+            if (bloodBuildEnabled && chainOrigin != null)
+                TriggerBloodNovaChain(chainOrigin, DType);
+
             yield break;
+        }
+
+        private void SpawnBloodNovaHit(Actor target)
+        {
+            if (target?.World == null)
+                return;
+
+            // Anchor the exact same native Blood Nova effect used by the player at the
+            // chained victim's world position. This is called explicitly before damage is
+            // applied because AttackPayload suppresses OnHit callbacks when
+            // AutomaticHitEffects is disabled.
+            var novaAnchor = SpawnProxy(
+                new Vector3D(target.Position.X, target.Position.Y, target.Position.Z),
+                WaitSeconds(BloodNovaHitEffectLifetimeSeconds));
+            novaAnchor.PlayEffectGroup(BloodNovaEffectGroup);
+
+            target.PlayEffectGroup(BloodNovaSplashEffectGroup);
+        }
+
+        private void TriggerBloodNovaChain(Actor origin, DamageType damageType)
+        {
+            var chainTargets = new TargetList();
+            var selectedTargetIds = new HashSet<uint> { origin.GlobalID };
+            Actor currentTarget = origin;
+
+            // Build one bounded nearest-neighbour chain. Every next enemy must be within nine
+            // units of the previous enemy, preventing the Nova from jumping across distant packs.
+            for (int chainIndex = 0; chainIndex < MaxBloodNovaChainTargetsPerCast; chainIndex++)
+            {
+                if (currentTarget?.World == null)
+                    break;
+
+                var nearbyTargets = GetEnemiesInRadius(currentTarget.Position, BloodNovaChainRadius);
+                nearbyTargets.SortByDistanceFrom(currentTarget.Position);
+
+                Actor nextTarget = null;
+                foreach (var candidate in nearbyTargets.Actors)
+                {
+                    if (candidate == null || candidate.World == null)
+                        continue;
+                    if (selectedTargetIds.Contains(candidate.GlobalID))
+                        continue;
+
+                    nextTarget = candidate;
+                    break;
+                }
+
+                if (nextTarget == null)
+                    break;
+
+                selectedTargetIds.Add(nextTarget.GlobalID);
+                chainTargets.Actors.Add(nextTarget);
+                currentTarget = nextTarget;
+            }
+
+            if (chainTargets.Actors.Count == 0)
+                return;
+
+            // All five possible chain victims share one payload, keeping damage processing cheap.
+            var chainAttack = new AttackPayload(this)
+            {
+                Targets = chainTargets,
+                AutomaticHitEffects = false
+            };
+            chainAttack.AddWeaponDamage(BloodNovaChainDamageMultiplier, damageType);
+
+            // AutomaticHitEffects=false intentionally prevents proc storms, but DIIIS also
+            // skips AttackPayload.OnHit in that mode. Spawn the bounded visuals explicitly
+            // so every one of the up-to-five chained enemies receives the Blood Nova wave.
+            foreach (var chainTarget in chainTargets.Actors)
+                SpawnBloodNovaHit(chainTarget);
+
+            chainAttack.Apply();
         }
     }
     #endregion
