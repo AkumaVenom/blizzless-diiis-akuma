@@ -23,7 +23,8 @@ DiIiS is a fully-functional open-source local server for [Diablo III: Reaper of 
 - Implemented personal artificial intelligence for 40% of all monsters.
 - Implemented personal artificial intelligence for half of the Bosses.
 - Implemented LAN
-
+- Implemented Custom Feature: Diablo 4 Blood Build Necromancer mechanics to Blood Siphon & Death Nova Skills.
+  
 ## Restrictions
 
 - Donate Store implementation is removed.
